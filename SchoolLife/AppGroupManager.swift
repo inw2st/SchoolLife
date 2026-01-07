@@ -17,12 +17,12 @@ final class AppGroupManager {
         detectAppGroup()
     }
     
-    /// 앱의 Entitlements에서 실제 App Group ID를 읽어옴
+    /// 앱의 Entitlements 또는 접근 가능한 컨테이너에서 App Group ID를 찾음
     private func detectAppGroup() {
-        // 방법 1: Entitlements에서 직접 읽기 (개발 환경용)
+        // 방법 1: 개발 환경용 App Group 우선 확인
         #if DEBUG
-        // 개발 환경에서는 하드코딩된 개발용 App Group 먼저 시도
-        let developmentGroup = "group.com.minwestt.slife.widget" // ← 실제 개발용 App Group
+        // 개발용 App Group을 먼저 시도
+        let developmentGroup = "group.com.minwestt.slife.widget" // 개발용 App Group
         if validateAppGroup(developmentGroup) {
             self.appGroupID = developmentGroup
             print("✅ 개발 환경 App Group 감지: \(developmentGroup)")
@@ -30,7 +30,7 @@ final class AppGroupManager {
         }
         #endif
         
-        // 방법 2: Entitlements에서 직접 읽기 (가장 정확)
+        // 방법 2: Entitlements에 등록된 App Group 확인
         if let appGroups = Bundle.main.object(forInfoDictionaryKey: "com.apple.security.application-groups") as? [String],
            let firstGroup = appGroups.first {
             // Entitlements에 등록된 첫 번째 App Group 사용
@@ -41,17 +41,16 @@ final class AppGroupManager {
             }
         }
         
-        // 방법 2: Entitlements가 Info.plist에 없는 경우, 실제 접근 가능한 것 찾기
-        // 모든 가능한 패턴 시도
+        // 방법 3: Entitlements를 읽지 못한 경우 접근 가능한 컨테이너 탐색
         let possiblePrefixes = [
             "group.",
             "group.6e88432fd066d72e.",
             "group.com.",
         ]
         
-        // FileManager로 실제 App Group 컨테이너 찾기
+        // FileManager로 실제 App Group 컨테이너 유효성 확인
         for prefix in possiblePrefixes {
-            // 일반적인 패턴들 시도
+            // 흔히 사용되는 suffix 패턴 시도
             for suffix in ["1", "2", "3", "schoollife", "SchoolLife"] {
                 let candidate = "\(prefix)\(suffix)"
                 if validateAppGroup(candidate) {
@@ -62,9 +61,9 @@ final class AppGroupManager {
             }
         }
         
-        // 방법 3: Bundle Identifier 기반으로 추측
+        // 방법 4: Bundle Identifier 기반 후보 추정
         if let bundleID = Bundle.main.bundleIdentifier {
-            // ESign 패턴: bundle ID의 해시를 사용하는 경우
+            // ESign 패턴: bundle ID를 기반으로 생성된 그룹명
             let candidates = [
                 "group.\(bundleID)",
                 "group.\(bundleID).shared",
@@ -98,7 +97,7 @@ final class AppGroupManager {
         return FileManager.default.fileExists(atPath: containerURL.path)
     }
     
-    /// 디버깅용: 현재 감지된 정보 출력
+    /// 디버깅용: 현재 감지된 정보를 출력
     func printDebugInfo() {
         print("=== App Group Debug Info ===")
         print("Detected App Group: \(appGroupID ?? "nil")")
@@ -110,7 +109,7 @@ final class AppGroupManager {
            ) {
             print("Container Path: \(containerURL.path)")
             
-            // UserDefaults에 저장된 키들 출력
+            // UserDefaults에 저장된 키 출력
             if let defaults = sharedDefaults {
                 print("Saved Keys:")
                 print("  - savedSchoolCode: \(defaults.string(forKey: "savedSchoolCode") ?? "nil")")
