@@ -72,8 +72,16 @@ NEIS Open API를 활용한 **급식 · 시간표 조회 iOS 앱**
 <br>
 <img width="280" alt="Simulator Screenshot - iPhone 17 Pro - 2026-01-07 at 23 26 00" src="https://github.com/user-attachments/assets/1b51bff7-45a7-4cb4-8299-bb9257ef4430" />
 </details>
+
+<details>
+<summary>디버그 정보</summary>
+<br>
+<img width="280" alt="Simulator Screenshot - iPhone 17 Pro - 2026-01-07 at 23 49 27" src="https://github.com/user-attachments/assets/3c715270-615c-4324-b202-abeddf6008d1" />
+</details>
+
 <details>
 <summary>위젯</summary>
+<br>
 <img height="500" alt="Simulator Screenshot - iPad (A16) - 2026-01-07 at 23 54 01" src="https://github.com/user-attachments/assets/d0b4f301-fc55-4c7e-8cad-52670c5cf709" />
 </details>
 
