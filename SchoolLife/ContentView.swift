@@ -124,7 +124,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - 시간표 뷰 (탭하면 편집 + 영구 저장 + 매주 적용)
+// MARK: - 시간표 뷰 (편집/저장/반복 적용)
 struct TimetableView: View {
     @ObservedObject var neisManager: NeisManager
 
@@ -132,7 +132,7 @@ struct TimetableView: View {
     @State private var editText: String = ""
     @State private var mode: EditApplyMode = .weekly
 
-    // 3가지 적용 방식
+    // 편집 적용 방식
     private enum EditApplyMode: String, CaseIterable, Identifiable {
         case todayOnly
         case weekly
@@ -168,7 +168,7 @@ struct TimetableView: View {
     var body: some View {
         VStack(spacing: 0) {
 
-            // 상단: 학년/반 선택
+            // 학년/반 선택 영역
             VStack(spacing: 12) {
                 Picker("학년", selection: $neisManager.grade) {
                     Text("1학년").tag("1")
@@ -205,7 +205,7 @@ struct TimetableView: View {
             .cornerRadius(15)
             .padding()
 
-            // 목록
+            // 시간표 목록
             ScrollView {
                 VStack(spacing: 10) {
                     if neisManager.timetables.isEmpty {
@@ -217,7 +217,7 @@ struct TimetableView: View {
                             Button {
                                 editingRow = time
                                 editText = neisManager.displayText(for: time)
-                                mode = .weekly // 기본값
+                                mode = .weekly // 기본 선택
                             } label: {
                                 HStack {
                                     Text("\(time.PERIO ?? "")교시")
@@ -258,7 +258,7 @@ struct TimetableView: View {
         .sheet(item: $editingRow) { row in
             NavigationStack {
                 Form {
-                    // 적용 방식 선택
+                    // 편집 적용 방식 선택
                     Section("적용 방식") {
                         ForEach(EditApplyMode.allCases) { m in
                             Button {
@@ -318,7 +318,7 @@ struct TimetableView: View {
                         }
                     }
 
-                    // ✅ bottomBar 대신 Form 내부에 삭제 섹션
+                    // 삭제 버튼을 Form 내부 섹션으로 이동
                     Section("삭제") {
                         Button(role: .destructive) {
                             deleteByCurrentMode(row: row)
@@ -493,7 +493,7 @@ struct DebugInfoView: View {
     var body: some View {
         NavigationStack {
             List {
-                // App Group 정보
+                // App Group 정보 섹션
                 Section(header: Text("📦 App Group")) {
                     if let appGroupID = AppGroupManager.shared.appGroupID {
                         VStack(alignment: .leading, spacing: 8) {
@@ -562,7 +562,7 @@ struct DebugInfoView: View {
                     }
                 }
                 
-                // Bundle 정보
+                // 앱 정보
                 Section(header: Text("📱 앱 정보")) {
                     if let bundleID = Bundle.main.bundleIdentifier {
                         LabeledContent("Bundle ID", value: bundleID)
@@ -691,7 +691,7 @@ struct DebugInfoView: View {
                     }
                 }
                 
-                // 복사 알림
+                // 복사 완료 메시지
                 if let message = copiedMessage {
                     Section {
                         HStack {
@@ -713,11 +713,11 @@ struct DebugInfoView: View {
         }
     }
     
-    // Provisioning Profile 파싱
+    // Provisioning Profile에서 plist 추출
     private func parseProvisioningProfile(_ data: Data) -> [String: Any]? {
         guard let dataString = String(data: data, encoding: .isoLatin1) else { return nil }
         
-        // XML 시작 부분 찾기
+        // plist XML 범위 확인
         guard let startRange = dataString.range(of: "<?xml"),
               let endRange = dataString.range(of: "</plist>") else {
             return nil
