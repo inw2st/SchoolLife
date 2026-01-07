@@ -34,21 +34,21 @@ final class NeisManager: ObservableObject {
     @AppStorage("isDarkMode", store: AppGroupManager.shared.sharedDefaults)
     var isDarkMode: Bool = false
 
-    // ✅ 날짜 고정 편집(override): 특정 날짜만 바꿀 때
+    // 특정 날짜만 덮어쓰기(override) 편집
     @AppStorage("timetableDateEditsJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableDateEditsJSON: String = "{}"
 
-    // ✅ 요일 반복 편집(template): 매주 같은 요일/교시에 적용
+    // 매주 반복되는 요일/교시 템플릿 편집
     @AppStorage("timetableWeeklyEditsJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableWeeklyEditsJSON: String = "{}"
     
     @AppStorage("timetableReplaceRulesJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableReplaceRulesJSON: String = "{}"
 
-    @Published private(set) var replaceRules: [String: String] = [:]   // from -> to
+    @Published private(set) var replaceRules: [String: String] = [:]   // 원본 -> 치환
 
 
-    /// key -> editedText
+    /// key: editedText
     @Published private(set) var timetableDateEdits: [String: String] = [:]
     @Published private(set) var timetableWeeklyEdits: [String: String] = [:]
 
@@ -109,7 +109,7 @@ final class NeisManager: ObservableObject {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    /// 특정 날짜 고정 키: 학교 + 날짜 + 학년 + 반 + 교시
+    /// 특정 날짜용 키: 학교 + 날짜 + 학년 + 반 + 교시
     func dateEditKey(for row: TimetableRow) -> String {
         let d = row.ALL_TI_YMD ?? getApiDateString()
         let g = row.GRADE ?? grade
@@ -119,13 +119,13 @@ final class NeisManager: ObservableObject {
     }
 
     /// 매주 반복 키: 학교 + 학년 + 반 + 요일 + 교시
-    /// weekday: 1=일 ... 7=토 (Calendar 기본)
+    /// weekday: 1=일 ... 7=토 (Calendar 기준)
     func weeklyEditKey(perio: String) -> String {
         let weekday = Calendar.current.component(.weekday, from: selectedDate)
         return "\(schoolCode)|G\(grade)|C\(classNum)|W\(weekday)|P\(perio)"
     }
 
-    /// 화면 표시용 텍스트(우선순위: 날짜고정 > 요일반복 > NEIS)
+    /// 화면 표시용 텍스트 (우선순위: 날짜 고정 > 요일 반복 > NEIS)
     func displayText(for row: TimetableRow) -> String {
         let perio = row.PERIO ?? ""
 
@@ -162,7 +162,7 @@ final class NeisManager: ObservableObject {
 
 
 
-    // ✅ 저장/삭제 API
+    // 편집 저장/삭제 API
     func setEditedTextDate(_ text: String, for row: TimetableRow) {
         timetableDateEdits[dateEditKey(for: row)] = text
         saveTimetableEdits()
@@ -234,7 +234,7 @@ final class NeisManager: ObservableObject {
 
     func saveSchool(school: SchoolRow) {
         DispatchQueue.main.async {
-            // 1) 먼저 @AppStorage(= UI가 바라보는 값)부터 확실히 초기화
+            // 1) UI가 참조하는 @AppStorage 값을 먼저 초기화
             self.grade = "1"
             self.classNum = "1"
             self.selectedDate = Date()
@@ -243,7 +243,7 @@ final class NeisManager: ObservableObject {
             self.schoolCode = school.SD_SCHUL_CODE
             self.schoolName = school.SCHUL_NM
 
-            // 2) App Group defaults에도 직접 쓰기
+            // 2) App Group defaults에도 동일하게 저장
             if let defaults = AppGroupManager.shared.sharedDefaults {
                 defaults.set(self.officeCode, forKey: "savedOfficeCode")
                 defaults.set(self.schoolCode, forKey: "savedSchoolCode")
@@ -256,7 +256,7 @@ final class NeisManager: ObservableObject {
             // 3) 데이터 다시 불러오기
             self.fetchAll()
 
-            // ✅ 4) 약간의 딜레이 후 위젯 새로고침 (UserDefaults 동기화 시간 확보)
+            // 4) UserDefaults 동기화 시간을 확보한 뒤 위젯 새로고침
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 WidgetCenter.shared.reloadAllTimelines()
             }
@@ -310,7 +310,7 @@ final class NeisManager: ObservableObject {
                 return
             }
 
-            // 디버그용 RAW 저장
+            // 디버그용 원본 JSON 저장
             if let raw = String(data: data, encoding: .utf8) {
                 DispatchQueue.main.async { self.timetableRawJSON = raw }
                 
