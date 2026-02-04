@@ -4,6 +4,7 @@ import WidgetKit
 enum AppTab: String {
     case meal
     case timetable
+    case schedule      // ▶ 학사일정 탭 추가
     case settings
 }
 
@@ -38,6 +39,10 @@ struct ContentView: View {
                         .tabItem { Label("시간표", systemImage: "clock.fill") }
                         .tag(AppTab.timetable)
 
+                    CalendarView(neisManager: neisManager)
+                        .tabItem { Label("학사일정", systemImage: "calendar.badge.plus") }
+                        .tag(AppTab.schedule)
+
                     SettingsView(neisManager: neisManager)
                         .tabItem { Label("설정", systemImage: "gearshape.fill") }
                         .tag(AppTab.settings)
@@ -51,6 +56,7 @@ struct ContentView: View {
         .onAppear {
             if neisManager.schoolCode.isEmpty { showSearchSheet = true }
             else { neisManager.fetchAll() }
+            neisManager.debugWriteForWatch()
         }
         .onChange(of: neisManager.selectedDate) { _, _ in
             neisManager.fetchAll()
@@ -63,6 +69,8 @@ struct ContentView: View {
                 selectedTab = .meal
             case "timetable":
                 selectedTab = .timetable
+            case "schedule":
+                selectedTab = .schedule
             case "settings":
                 selectedTab = .settings
             default:
@@ -178,6 +186,7 @@ struct TimetableView: View {
                 .pickerStyle(.segmented)
                 .onChange(of: neisManager.grade) { _, _ in
                     neisManager.fetchTimetable()
+                    neisManager.syncWatchContext()
                     WidgetCenter.shared.reloadTimelines(ofKind: "TimetableWidget")
                 }
 
@@ -194,6 +203,7 @@ struct TimetableView: View {
                     }
                     .onChange(of: neisManager.classNum) { _, _ in
                         neisManager.fetchTimetable()
+                        neisManager.syncWatchContext()
                         WidgetCenter.shared.reloadTimelines(ofKind: "TimetableWidget")
                     }
 

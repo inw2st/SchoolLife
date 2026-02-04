@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
    LastUpgradeVersion = "2620"
-   wasCreatedForAppExtension = "YES"
    version = "2.0">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -16,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A64C0622F0C02F7006F0F5A"
-               BuildableName = "MealWidgetExtension.appex"
-               BlueprintName = "MealWidgetExtension"
+               BlueprintIdentifier = "0AA56C782F154A1500879128"
+               BuildableName = "SchoolLifeWatchWidgetsExtension.appex"
+               BlueprintName = "SchoolLifeWatchWidgetsExtension"
                ReferencedContainer = "container:SchoolLife.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -36,6 +35,20 @@
                ReferencedContainer = "container:SchoolLife.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0AA56C492F1549FA00879128"
+               BuildableName = "SchoolLifeWatch Watch App.app"
+               BlueprintName = "SchoolLifeWatch Watch App"
+               ReferencedContainer = "container:SchoolLife.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -44,30 +57,6 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
-      <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A64C0462F0BF3BF006F0F5A"
-               BuildableName = "SchoolLifeUITests.xctest"
-               BlueprintName = "SchoolLifeUITests"
-               ReferencedContainer = "container:SchoolLife.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A64C03C2F0BF3BF006F0F5A"
-               BuildableName = "SchoolLifeTests.xctest"
-               BlueprintName = "SchoolLifeTests"
-               ReferencedContainer = "container:SchoolLife.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -81,23 +70,22 @@
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES"
       launchAutomaticallySubstyle = "2">
-      <RemoteRunnable
-         runnableDebuggingMode = "2"
-         BundleIdentifier = "com.apple.springboard">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0A64C0622F0C02F7006F0F5A"
-            BuildableName = "MealWidgetExtension.appex"
-            BlueprintName = "MealWidgetExtension"
+            BlueprintIdentifier = "0AA56C782F154A1500879128"
+            BuildableName = "SchoolLifeWatchWidgetsExtension.appex"
+            BlueprintName = "SchoolLifeWatchWidgetsExtension"
             ReferencedContainer = "container:SchoolLife.xcodeproj">
          </BuildableReference>
-      </RemoteRunnable>
+      </BuildableProductRunnable>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0A64C02F2F0BF3BD006F0F5A"
-            BuildableName = "SchoolLife.app"
-            BlueprintName = "SchoolLife"
+            BlueprintIdentifier = "0AA56C492F1549FA00879128"
+            BuildableName = "SchoolLifeWatch Watch App.app"
+            BlueprintName = "SchoolLifeWatch Watch App"
             ReferencedContainer = "container:SchoolLife.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -114,30 +102,24 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "_XCWidgetFamily"
-            value = "systemLarge"
+            value = "systemMedium"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
-      <LocationScenarioReference
-         identifier = "com.apple.dt.IDEFoundation.CurrentLocationScenarioIdentifier"
-         referenceType = "1">
-      </LocationScenarioReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
       shouldUseLaunchSchemeArgsEnv = "YES"
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
-      debugDocumentVersioning = "YES"
-      askForAppToLaunch = "Yes"
-      launchAutomaticallySubstyle = "2">
+      debugDocumentVersioning = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0A64C02F2F0BF3BD006F0F5A"
-            BuildableName = "SchoolLife.app"
-            BlueprintName = "SchoolLife"
+            BlueprintIdentifier = "0AA56C782F154A1500879128"
+            BuildableName = "SchoolLifeWatchWidgetsExtension.appex"
+            BlueprintName = "SchoolLifeWatchWidgetsExtension"
             ReferencedContainer = "container:SchoolLife.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

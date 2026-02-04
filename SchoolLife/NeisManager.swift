@@ -1,8 +1,9 @@
 import Foundation
 import SwiftUI
 import WidgetKit
+import WatchConnectivity
 
-final class NeisManager: ObservableObject {
+final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     // MARK: - Published
     @Published var schools: [SchoolRow] = []
@@ -10,6 +11,12 @@ final class NeisManager: ObservableObject {
     @Published var timetables: [TimetableRow] = []
     @Published var selectedDate: Date = Date()
     @Published var timetableRawJSON: String = ""
+
+    // ▶ 학사일정
+    @Published var scheduleEvents: [ScheduleEventRow] = []
+    /// 현재 달력에서 표시하는 월의 시작·끝 날짜 (CalendarView가 세팅)
+    @Published var calendarMonthStart: Date = Date()
+    @Published var calendarMonthEnd: Date   = Date()
 
     // MARK: - App Group Storage (위젯 공유)
     private var appGroupStore: UserDefaults? {
@@ -54,9 +61,35 @@ final class NeisManager: ObservableObject {
 
     // MARK: - NEIS API
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
+    private var watchSession: WCSession?
 
-    init() {
+    override init() {
+        super.init()
+        configureWatchSession()
         loadTimetableEditsIfNeeded()
+    }
+
+    private func configureWatchSession() {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        session.delegate = self
+        session.activate()
+        watchSession = session
+    }
+
+    func syncWatchContext() {
+        guard let session = watchSession, session.activationState == .activated else { return }
+        let payload: [String: Any] = [
+            "savedOfficeCode": officeCode,
+            "savedSchoolCode": schoolCode,
+            "savedSchoolName": schoolName,
+            "savedGrade": grade,
+            "savedClass": classNum,
+            "timetableDateEditsJSON": timetableDateEditsJSON,
+            "timetableWeeklyEditsJSON": timetableWeeklyEditsJSON,
+            "timetableReplaceRulesJSON": timetableReplaceRulesJSON
+        ]
+        session.transferUserInfo(payload)
     }
 
     // MARK: - Date
@@ -101,13 +134,14 @@ final class NeisManager: ObservableObject {
         }
         
         if let data = try? JSONEncoder().encode(replaceRules),
-           let json = String(data: data, encoding: .utf8) {
+            let json = String(data: data, encoding: .utf8) {
             timetableReplaceRulesJSON = json
         }
 
-
         WidgetCenter.shared.reloadAllTimelines()
+        syncWatchContext()
     }
+
 
     /// 특정 날짜용 키: 학교 + 날짜 + 학년 + 반 + 교시
     func dateEditKey(for row: TimetableRow) -> String {
@@ -253,6 +287,8 @@ final class NeisManager: ObservableObject {
                 defaults.synchronize()
             }
 
+            self.syncWatchContext()
+
             // 3) 데이터 다시 불러오기
             self.fetchAll()
 
@@ -267,6 +303,7 @@ final class NeisManager: ObservableObject {
     func fetchAll() {
         fetchMeal()
         fetchTimetable()
+        fetchSchedule()          // ▶ 학사일정도 함께 불러옴
     }
 
     // MARK: - Meal
@@ -341,10 +378,139 @@ final class NeisManager: ObservableObject {
         }.resume()
     }
 
-    // MARK: - Helpers
+    // ─────────────────────────────────────────────
+    // MARK: - 학사일정 (SchoolSchedule)
+    // ─────────────────────────────────────────────
+
+    /// CalendarView에서 표시할 월이 바뀌었을 때 호출
+    /// `monthStart` / `monthEnd`는 달력 그리드 기준 날짜 (해당 월 1일 ~ 마지막 날)
+    func fetchSchedule(from monthStart: Date? = nil, to monthEnd: Date? = nil) {
+        guard !schoolCode.isEmpty else {
+            print("🚫 fetchSchedule: schoolCode 빈 값")
+            return
+        }
+
+        let start = monthStart ?? calendarMonthStart
+        let end   = monthEnd   ?? calendarMonthEnd
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        let fromYMD = formatter.string(from: start)
+        let toYMD   = formatter.string(from: end)
+
+        let urlString =
+            "https://open.neis.go.kr/hub/SchoolSchedule" +
+            "?KEY=\(apiKey)" +
+            "&Type=json" +
+            "&pIndex=1&pSize=100" +
+            "&ATPT_OFCDC_SC_CODE=\(officeCode)" +
+            "&SD_SCHUL_CODE=\(schoolCode)" +
+            "&AA_FROM_YMD=\(fromYMD)" +
+            "&AA_TO_YMD=\(toYMD)"
+
+        print("📡 fetchSchedule URL:\n\(urlString)")
+
+        guard let url = URL(string: urlString) else {
+            print("🚫 fetchSchedule: URL 생성 실패")
+            return
+        }
+
+        URLSession.shared.dataTask(with: url) { [self] data, response, error in
+            if let error = error {
+                print("🚫 fetchSchedule 네트워크 오류: \(error)")
+                DispatchQueue.main.async { self.scheduleEvents = [] }
+                return
+            }
+            print("📡 fetchSchedule HTTP status: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+
+            guard let data = data else {
+                print("🚫 fetchSchedule: data nil")
+                DispatchQueue.main.async { self.scheduleEvents = [] }
+                return
+            }
+
+            let raw = String(data: data, encoding: .utf8) ?? "(decode fail)"
+            print("📦 fetchSchedule RAW 응답:\n\(raw)")
+
+            do {
+                let decoded = try JSONDecoder().decode(ScheduleResponse.self, from: data)
+                print("✅ schoolSchedule 배열 수: \(decoded.schoolSchedule?.count ?? -1)")
+
+                let rows = decoded.schoolSchedule?[1].row ?? []
+                print("✅ row 수 (필터 전): \(rows.count)")
+
+                let filtered = rows.filter { self.isEventForCurrentGrade($0) }
+                print("✅ row 수 (필터 후, grade=\(self.grade)): \(filtered.count)")
+
+                DispatchQueue.main.async {
+                    self.scheduleEvents = filtered
+                }
+            } catch {
+                print("🚫 fetchSchedule 파싱 오류: \(error)")
+                DispatchQueue.main.async { self.scheduleEvents = [] }
+            }
+        }.resume()
+    }
+
+    /// 현재 학년(grade)에 해당하는 이벤트인지 판단
+    /// NEIS 응답 필드:
+    ///   ONE_GRADE_EVENT_YN   → 1학년
+    ///   TW_GRADE_EVENT_YN    → 2학년
+    ///   THREE_GRADE_EVENT_YN → 3학년
+    ///   FR_GRADE_EVENT_YN    → 4학년 (초등)
+    ///   FIV_GRADE_EVENT_YN   → 5학년 (초등)
+    ///   SIX_GRADE_EVENT_YN   → 6학년 (초등)
+    /// 값이 "Y"이면 해당 학년에 적용, "*"이면 해당 학년 없음
+    private func isEventForCurrentGrade(_ event: ScheduleEventRow) -> Bool {
+        let flag: String?
+        switch grade {
+        case "1": flag = event.ONE_GRADE_EVENT_YN
+        case "2": flag = event.TW_GRADE_EVENT_YN
+        case "3": flag = event.THREE_GRADE_EVENT_YN
+        case "4": flag = event.FR_GRADE_EVENT_YN
+        case "5": flag = event.FIV_GRADE_EVENT_YN
+        case "6": flag = event.SIX_GRADE_EVENT_YN
+        default:  flag = nil
+        }
+        // "Y" 또는 해당 필드가 없는 경우(전체 학년 공통 이벤트) 포함
+        return flag == nil || flag == "Y"
+    }
+
+    /// 특정 날짜에 해당하는 학사일정 이벤트 목록 반환
+    func events(on date: Date) -> [ScheduleEventRow] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        let dateStr = formatter.string(from: date)
+        return scheduleEvents.filter { $0.AA_YMD == dateStr }
+    }
+
+    /// MARK: - Helpers
     func cleanMealText(_ text: String) -> String {
         return text.replacingOccurrences(of: "<br/>", with: "\n")
             .replacingOccurrences(of: #"\([0-9\.]+\)"#, with: "", options: .regularExpression)
+    }
+    
+    // 🔧 워치 통신 테스트용 (아이폰 → 워치)
+    func debugWriteForWatch() {
+        if let defaults = AppGroupManager.shared.sharedDefaults {
+            defaults.set("HELLO_FROM_IPHONE", forKey: "watch_test")
+            print("📱 wrote watch_test")
+        } else {
+            print("📱 App Group 접근 실패")
+        }
+    }
+
+    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
+        if state == .activated {
+            syncWatchContext()
+        }
+    }
+
+    func sessionDidBecomeInactive(_ session: WCSession) {
+    }
+
+    func sessionDidDeactivate(_ session: WCSession) {
+        session.activate()
     }
 }
 
@@ -392,4 +558,48 @@ struct TimetableRow: Codable, Identifiable {
     let CLASS_NM: String?
     let PERIO: String?
     let ITRT_CNTNT: String?
+}
+
+// ─────────────────────────────────────────────
+// MARK: - 학사일정 모델
+// ─────────────────────────────────────────────
+
+/// NEIS SchoolSchedule API 최상위 응답
+/// 기존 NeisResponse와 동일한 패턴: 배열[0] = head, 배열[1] = row
+struct ScheduleResponse: Codable {
+    let schoolSchedule: [ScheduleInfo]?
+
+    enum CodingKeys: String, CodingKey {
+        case schoolSchedule = "SchoolSchedule"
+    }
+}
+
+struct ScheduleInfo: Codable {
+    let head: [HeadInfo]?
+    let row: [ScheduleEventRow]?
+}
+
+/// 학사일정 단일 행사 데이터
+struct ScheduleEventRow: Codable, Identifiable {
+    /// 고유 ID: 날짜 + 행사명으로 조합 (같은 날 여러 행사 가능)
+    var id: String {
+        "\(AA_YMD ?? "")|\(EVENT_NM ?? "")"
+    }
+
+    let ATPT_OFCDC_SC_CODE: String?   // 시도교육청코드
+    let SD_SCHUL_CODE: String?        // 학교코드
+    let SCHUL_NM: String?             // 학교명
+    let AY: String?                   // 학년도
+    let SBTR_DD_SC_NM: String?        // 휴업일 구분 (예: "휴업일", "평일")
+    let AA_YMD: String?               // 행사일자  yyyyMMdd
+    let EVENT_NM: String?             // 행사명
+    let EVENT_CNTNT: String?          // 행사내용 (상세 설명)
+
+    // 학년별 행사 여부 ("Y" = 해당, "*" = 해당 없음)
+    let ONE_GRADE_EVENT_YN: String?   // 1학년
+    let TW_GRADE_EVENT_YN: String?    // 2학년
+    let THREE_GRADE_EVENT_YN: String? // 3학년
+    let FR_GRADE_EVENT_YN: String?    // 4학년
+    let FIV_GRADE_EVENT_YN: String?   // 5학년
+    let SIX_GRADE_EVENT_YN: String?   // 6학년
 }

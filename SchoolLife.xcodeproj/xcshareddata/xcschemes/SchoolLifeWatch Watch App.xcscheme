@@ -15,6 +15,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0AA56C492F1549FA00879128"
+               BuildableName = "SchoolLifeWatch Watch App.app"
+               BlueprintName = "SchoolLifeWatch Watch App"
+               ReferencedContainer = "container:SchoolLife.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "0A64C02F2F0BF3BD006F0F5A"
                BuildableName = "SchoolLife.app"
                BlueprintName = "SchoolLife"
@@ -29,30 +43,6 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
-      <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A64C0462F0BF3BF006F0F5A"
-               BuildableName = "SchoolLifeUITests.xctest"
-               BlueprintName = "SchoolLifeUITests"
-               ReferencedContainer = "container:SchoolLife.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A64C03C2F0BF3BF006F0F5A"
-               BuildableName = "SchoolLifeTests.xctest"
-               BlueprintName = "SchoolLifeTests"
-               ReferencedContainer = "container:SchoolLife.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -68,9 +58,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0A64C02F2F0BF3BD006F0F5A"
-            BuildableName = "SchoolLife.app"
-            BlueprintName = "SchoolLife"
+            BlueprintIdentifier = "0AA56C492F1549FA00879128"
+            BuildableName = "SchoolLifeWatch Watch App.app"
+            BlueprintName = "SchoolLifeWatch Watch App"
             ReferencedContainer = "container:SchoolLife.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -85,9 +75,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0A64C02F2F0BF3BD006F0F5A"
-            BuildableName = "SchoolLife.app"
-            BlueprintName = "SchoolLife"
+            BlueprintIdentifier = "0AA56C492F1549FA00879128"
+            BuildableName = "SchoolLifeWatch Watch App.app"
+            BlueprintName = "SchoolLifeWatch Watch App"
             ReferencedContainer = "container:SchoolLife.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

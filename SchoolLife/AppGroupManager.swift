@@ -86,15 +86,17 @@ final class AppGroupManager {
     
     /// App Group이 실제로 접근 가능한지 확인
     private func validateAppGroup(_ groupID: String) -> Bool {
-        // 컨테이너 URL 확인
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: groupID
         ) else {
             return false
         }
-        
-        // 실제 파일 시스템에 존재하는지 확인
-        return FileManager.default.fileExists(atPath: containerURL.path)
+
+        if !FileManager.default.fileExists(atPath: containerURL.path) {
+            try? FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true)
+        }
+
+        return true
     }
     
     /// 디버깅용: 현재 감지된 정보를 출력

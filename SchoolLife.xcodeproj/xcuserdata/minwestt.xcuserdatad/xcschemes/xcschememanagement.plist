@@ -14,6 +14,16 @@
 			<key>orderHint</key>
 			<integer>1</integer>
 		</dict>
+		<key>SchoolLifeWatch Watch App.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>3</integer>
+		</dict>
+		<key>SchoolLifeWatchWidgetsExtension.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>2</integer>
+		</dict>
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
@@ -23,6 +33,16 @@
 			<true/>
 		</dict>
 		<key>0A64C0622F0C02F7006F0F5A</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>0AA56C492F1549FA00879128</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>0AA56C782F154A1500879128</key>
 		<dict>
 			<key>primary</key>
 			<true/>

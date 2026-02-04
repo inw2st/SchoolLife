@@ -1,11 +1,22 @@
 import Foundation
 import SwiftUI
+import Combine
+import WatchConnectivity
+import WidgetKit
 
-final class WatchNeisManager: ObservableObject {
+final class WatchNeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published var meals: [WatchMealRow] = []
     @Published var timetables: [WatchTimetableRow] = []
+    @Published var schoolName: String = ""
     
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
+    private var session: WCSession?
+    
+    override init() {
+        super.init()
+        configureSession()
+        schoolName = schoolNameFromStore
+    }
     
     // App Group에서 설정 읽기
     private var appGroupStore: UserDefaults? {
@@ -18,6 +29,10 @@ final class WatchNeisManager: ObservableObject {
     
     private var schoolCode: String {
         appGroupStore?.string(forKey: "savedSchoolCode") ?? ""
+    }
+    
+    private var schoolNameFromStore: String {
+        appGroupStore?.string(forKey: "savedSchoolName") ?? ""
     }
     
     private var grade: String {
@@ -55,7 +70,16 @@ final class WatchNeisManager: ObservableObject {
         return decoded
     }
     
+    private func configureSession() {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        session.delegate = self
+        session.activate()
+        self.session = session
+    }
+    
     func fetchAll() {
+        schoolName = schoolNameFromStore
         fetchMeal()
         fetchTimetable()
     }
@@ -74,7 +98,7 @@ final class WatchNeisManager: ObservableObject {
                let decoded = try? JSONDecoder().decode(WatchMealResponse.self, from: data),
                let rows = decoded.mealServiceDietInfo?.compactMap({ $0.row }).first(where: { !($0?.isEmpty ?? true) }) {
                 DispatchQueue.main.async {
-                    self.meals = rows
+                    self.meals = rows ?? []
                 }
             } else {
                 DispatchQueue.main.async {
@@ -98,7 +122,7 @@ final class WatchNeisManager: ObservableObject {
                let decoded = try? JSONDecoder().decode(WatchTimetableResponse.self, from: data),
                let rows = decoded.hisTimetable?.compactMap({ $0.row }).first(where: { !($0?.isEmpty ?? true) }) {
                 DispatchQueue.main.async {
-                    self.timetables = rows.sorted {
+                    self.timetables = (rows ?? []).sorted {
                         (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
                     }
                 }
@@ -148,6 +172,50 @@ final class WatchNeisManager: ObservableObject {
         // 4) 원본
         return row.ITRT_CNTNT ?? "-"
     }
+    
+    private func storeUserInfo(_ userInfo: [String: Any]) {
+        guard let defaults = AppGroupManager.shared.sharedDefaults else { return }
+        if let value = userInfo["savedOfficeCode"] as? String { defaults.set(value, forKey: "savedOfficeCode") }
+        if let value = userInfo["savedSchoolCode"] as? String { defaults.set(value, forKey: "savedSchoolCode") }
+        if let value = userInfo["savedSchoolName"] as? String { defaults.set(value, forKey: "savedSchoolName") }
+        if let value = userInfo["savedGrade"] as? String { defaults.set(value, forKey: "savedGrade") }
+        if let value = userInfo["savedClass"] as? String { defaults.set(value, forKey: "savedClass") }
+        if let value = userInfo["timetableDateEditsJSON"] as? String { defaults.set(value, forKey: "timetableDateEditsJSON") }
+        if let value = userInfo["timetableWeeklyEditsJSON"] as? String { defaults.set(value, forKey: "timetableWeeklyEditsJSON") }
+        if let value = userInfo["timetableReplaceRulesJSON"] as? String { defaults.set(value, forKey: "timetableReplaceRulesJSON") }
+        defaults.synchronize()
+        DispatchQueue.main.async {
+            self.schoolName = self.schoolNameFromStore
+        }
+    }
+
+    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
+        if state == .activated {
+            DispatchQueue.main.async {
+                self.schoolName = self.schoolNameFromStore
+                self.fetchAll()
+            }
+        }
+    }
+
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
+        storeUserInfo(userInfo)
+        DispatchQueue.main.async {
+            self.schoolName = self.schoolNameFromStore
+            self.fetchAll()
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+
+    // 🔧 아이폰 → 워치 App Group 통신 테스트
+    func debugReadFromPhone() {
+        let v = UserDefaults(
+            suiteName: AppGroupManager.shared.appGroupID ?? ""
+        )?.string(forKey: "watch_test")
+
+        print("⌚️ watch_test =", v ?? "nil")
+    }
+
 }
 
 // MARK: - Models

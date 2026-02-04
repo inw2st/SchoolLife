@@ -20,6 +20,7 @@ struct WatchContentView: View {
         .tabViewStyle(.page)
         .onAppear {
             neisManager.fetchAll()
+            neisManager.debugReadFromPhone()
         }
     }
 }
@@ -31,6 +32,12 @@ struct WatchMealView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
+                if !neisManager.schoolName.isEmpty {
+                    Text(neisManager.schoolName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
                 Text("오늘의 급식")
                     .font(.headline)
                     .foregroundColor(.blue)
@@ -77,6 +84,12 @@ struct WatchTimetableView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
+                if !neisManager.schoolName.isEmpty {
+                    Text(neisManager.schoolName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
                 Text("오늘의 시간표")
                     .font(.headline)
                     .foregroundColor(.blue)
