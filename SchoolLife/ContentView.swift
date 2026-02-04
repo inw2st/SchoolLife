@@ -132,7 +132,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - 시간표 뷰 (편집/저장/반복 적용)
+// MARK: - 시간표 뷰
 struct TimetableView: View {
     @ObservedObject var neisManager: NeisManager
 
@@ -176,7 +176,6 @@ struct TimetableView: View {
     var body: some View {
         VStack(spacing: 0) {
 
-            // 학년/반 선택 영역
             VStack(spacing: 12) {
                 Picker("학년", selection: $neisManager.grade) {
                     Text("1학년").tag("1")

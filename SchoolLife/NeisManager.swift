@@ -4,21 +4,16 @@ import WidgetKit
 import WatchConnectivity
 
 final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
-
-    // MARK: - Published
     @Published var schools: [SchoolRow] = []
     @Published var meals: [MealRow] = []
     @Published var timetables: [TimetableRow] = []
     @Published var selectedDate: Date = Date()
     @Published var timetableRawJSON: String = ""
 
-    // ▶ 학사일정
     @Published var scheduleEvents: [ScheduleEventRow] = []
-    /// 현재 달력에서 표시하는 월의 시작·끝 날짜 (CalendarView가 세팅)
     @Published var calendarMonthStart: Date = Date()
     @Published var calendarMonthEnd: Date   = Date()
 
-    // MARK: - App Group Storage (위젯 공유)
     private var appGroupStore: UserDefaults? {
         AppGroupManager.shared.sharedDefaults
     }
@@ -41,25 +36,21 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @AppStorage("isDarkMode", store: AppGroupManager.shared.sharedDefaults)
     var isDarkMode: Bool = false
 
-    // 특정 날짜만 덮어쓰기(override) 편집
     @AppStorage("timetableDateEditsJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableDateEditsJSON: String = "{}"
 
-    // 매주 반복되는 요일/교시 템플릿 편집
     @AppStorage("timetableWeeklyEditsJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableWeeklyEditsJSON: String = "{}"
     
     @AppStorage("timetableReplaceRulesJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableReplaceRulesJSON: String = "{}"
 
-    @Published private(set) var replaceRules: [String: String] = [:]   // 원본 -> 치환
+    @Published private(set) var replaceRules: [String: String] = [:]
 
 
-    /// key: editedText
     @Published private(set) var timetableDateEdits: [String: String] = [:]
     @Published private(set) var timetableWeeklyEdits: [String: String] = [:]
 
-    // MARK: - NEIS API
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
     private var watchSession: WCSession?
 
@@ -92,14 +83,12 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         session.transferUserInfo(payload)
     }
 
-    // MARK: - Date
     func getApiDateString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd"
         return formatter.string(from: selectedDate)
     }
 
-    // MARK: - Timetable Edit Persistence
     func loadTimetableEditsIfNeeded() {
         if let d = timetableDateEditsJSON.data(using: .utf8),
            let decoded = try? JSONDecoder().decode([String: String].self, from: d) {
@@ -143,7 +132,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
 
-    /// 특정 날짜용 키: 학교 + 날짜 + 학년 + 반 + 교시
     func dateEditKey(for row: TimetableRow) -> String {
         let d = row.ALL_TI_YMD ?? getApiDateString()
         let g = row.GRADE ?? grade
@@ -152,36 +140,29 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         return "\(schoolCode)|\(d)|\(g)|\(c)|\(p)"
     }
 
-    /// 매주 반복 키: 학교 + 학년 + 반 + 요일 + 교시
-    /// weekday: 1=일 ... 7=토 (Calendar 기준)
     func weeklyEditKey(perio: String) -> String {
         let weekday = Calendar.current.component(.weekday, from: selectedDate)
         return "\(schoolCode)|G\(grade)|C\(classNum)|W\(weekday)|P\(perio)"
     }
 
-    /// 화면 표시용 텍스트 (우선순위: 날짜 고정 > 요일 반복 > NEIS)
     func displayText(for row: TimetableRow) -> String {
         let perio = row.PERIO ?? ""
 
-        // 1) 날짜 고정
         let dk = dateEditKey(for: row)
         if let edited = timetableDateEdits[dk], !edited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return edited
         }
 
-        // 2) 요일 반복
         let wk = weeklyEditKey(perio: perio)
         if let edited = timetableWeeklyEdits[wk], !edited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return edited
         }
 
-        // 3) 과목명 자동 치환
         let original = (row.ITRT_CNTNT ?? "-").trimmingCharacters(in: .whitespacesAndNewlines)
         if let replaced = replaceRules[original], !replaced.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return replaced
         }
 
-        // 4) 원문
         return row.ITRT_CNTNT ?? "-"
     }
 
@@ -196,7 +177,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
 
 
-    // 편집 저장/삭제 API
     func setEditedTextDate(_ text: String, for row: TimetableRow) {
         timetableDateEdits[dateEditKey(for: row)] = text
         saveTimetableEdits()
@@ -248,7 +228,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
 
-    // MARK: - School Search
     func searchSchool(query: String) {
         guard !query.isEmpty,
               let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
@@ -268,7 +247,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     func saveSchool(school: SchoolRow) {
         DispatchQueue.main.async {
-            // 1) UI가 참조하는 @AppStorage 값을 먼저 초기화
             self.grade = "1"
             self.classNum = "1"
             self.selectedDate = Date()
@@ -277,7 +255,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
             self.schoolCode = school.SD_SCHUL_CODE
             self.schoolName = school.SCHUL_NM
 
-            // 2) App Group defaults에도 동일하게 저장
             if let defaults = AppGroupManager.shared.sharedDefaults {
                 defaults.set(self.officeCode, forKey: "savedOfficeCode")
                 defaults.set(self.schoolCode, forKey: "savedSchoolCode")
@@ -289,24 +266,20 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
             self.syncWatchContext()
 
-            // 3) 데이터 다시 불러오기
             self.fetchAll()
 
-            // 4) UserDefaults 동기화 시간을 확보한 뒤 위젯 새로고침
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 WidgetCenter.shared.reloadAllTimelines()
             }
         }
     }
     
-    // MARK: - Fetch All
     func fetchAll() {
         fetchMeal()
         fetchTimetable()
         fetchSchedule()          // ▶ 학사일정도 함께 불러옴
     }
 
-    // MARK: - Meal
     func fetchMeal() {
         guard !schoolCode.isEmpty else { return }
 
@@ -326,7 +299,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         }.resume()
     }
 
-    // MARK: - Timetable
     func fetchTimetable() {
         guard !schoolCode.isEmpty else { return }
 
@@ -347,13 +319,9 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                 return
             }
 
-            // 디버그용 원본 JSON 저장
             if let raw = String(data: data, encoding: .utf8) {
                 DispatchQueue.main.async { self.timetableRawJSON = raw }
                 
-                #if DEBUG
-                // print("NEIS RAW JSON:\n\(raw)")
-                #endif
             }
 
             do {
@@ -378,17 +346,10 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         }.resume()
     }
 
-    // ─────────────────────────────────────────────
-    // MARK: - 학사일정 (SchoolSchedule)
-    // ─────────────────────────────────────────────
+    // MARK: 학사일정 (SchoolSchedule)
 
-    /// CalendarView에서 표시할 월이 바뀌었을 때 호출
-    /// `monthStart` / `monthEnd`는 달력 그리드 기준 날짜 (해당 월 1일 ~ 마지막 날)
     func fetchSchedule(from monthStart: Date? = nil, to monthEnd: Date? = nil) {
-        guard !schoolCode.isEmpty else {
-            print("🚫 fetchSchedule: schoolCode 빈 값")
-            return
-        }
+        guard !schoolCode.isEmpty else { return }
 
         let start = monthStart ?? calendarMonthStart
         let end   = monthEnd   ?? calendarMonthEnd
@@ -410,27 +371,19 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
         print("📡 fetchSchedule URL:\n\(urlString)")
 
-        guard let url = URL(string: urlString) else {
-            print("🚫 fetchSchedule: URL 생성 실패")
-            return
-        }
+        guard let url = URL(string: urlString) else { return }
 
         URLSession.shared.dataTask(with: url) { [self] data, response, error in
             if let error = error {
-                print("🚫 fetchSchedule 네트워크 오류: \(error)")
                 DispatchQueue.main.async { self.scheduleEvents = [] }
                 return
             }
             print("📡 fetchSchedule HTTP status: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
 
             guard let data = data else {
-                print("🚫 fetchSchedule: data nil")
                 DispatchQueue.main.async { self.scheduleEvents = [] }
                 return
             }
-
-            let raw = String(data: data, encoding: .utf8) ?? "(decode fail)"
-            print("📦 fetchSchedule RAW 응답:\n\(raw)")
 
             do {
                 let decoded = try JSONDecoder().decode(ScheduleResponse.self, from: data)
