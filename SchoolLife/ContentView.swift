@@ -453,6 +453,8 @@ struct MealView: View {
 struct SettingsView: View {
     @ObservedObject var neisManager: NeisManager
     @State private var showDebugInfo = false
+    @State private var showSchoolSearch = false
+    @State private var showGradeClassEdit = false
 
     var body: some View {
         List {
@@ -467,9 +469,27 @@ struct SettingsView: View {
             }
 
             Section(header: Text("현재 정보")) {
-                LabeledContent("학교명", value: neisManager.schoolName)
-                LabeledContent("학년", value: neisManager.grade + "학년")
-                LabeledContent("반", value: neisManager.classNum + "반")
+                Button {
+                    showSchoolSearch = true
+                } label: {
+                    HStack {
+                        Text("학교명")
+                        Spacer()
+                        Text(neisManager.schoolName.isEmpty ? "설정 안 됨" : neisManager.schoolName)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Button {
+                    showGradeClassEdit = true
+                } label: {
+                    HStack {
+                        Text("학년 / 반")
+                        Spacer()
+                        Text("\(neisManager.grade)학년 \(neisManager.classNum)반")
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
             
             Section(header: Text("개발자 정보")) {
@@ -491,6 +511,48 @@ struct SettingsView: View {
         .listStyle(.insetGrouped)
         .sheet(isPresented: $showDebugInfo) {
             DebugInfoView()
+        }
+        .sheet(isPresented: $showSchoolSearch) {
+            SchoolSearchView(neisManager: neisManager)
+        }
+        .sheet(isPresented: $showGradeClassEdit) {
+            GradeClassEditView(neisManager: neisManager)
+        }
+    }
+}
+
+// MARK: - 학년/반 수정 뷰
+struct GradeClassEditView: View {
+    @ObservedObject var neisManager: NeisManager
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("학년")) {
+                    Picker("학년", selection: $neisManager.grade) {
+                        Text("1학년").tag("1")
+                        Text("2학년").tag("2")
+                        Text("3학년").tag("3")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section(header: Text("반")) {
+                    Picker("반", selection: $neisManager.classNum) {
+                        ForEach(1...15, id: \.self) { i in
+                            Text("\(i)반").tag("\(i)")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("학년/반 변경")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("닫기") { dismiss() }
+                }
+            }
         }
     }
 }

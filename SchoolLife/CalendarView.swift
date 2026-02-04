@@ -44,6 +44,8 @@ struct CalendarView: View {
         GeometryReader { geometry in
             let isIPad = geometry.size.width > 600
             let maxWidth: CGFloat = isIPad ? 700 : .infinity
+            // iPad에서 셀 크기가 커지면서 6주차까지 안전하게 보이도록 높이 여유를 넉넉히 줌
+            let calendarHeight: CGFloat = isIPad ? 660 : 380
             
             VStack(spacing: 0) {
                 // 헤더
@@ -53,7 +55,7 @@ struct CalendarView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         // 달력 영역 (TabView로 페이지 스와이프)
-                        calendarSection
+                        calendarSection(calendarHeight: calendarHeight)
                             .frame(maxWidth: maxWidth)
                         
                         Divider()
@@ -63,8 +65,11 @@ struct CalendarView: View {
                         // 이벤트 목록
                         eventListSection
                             .frame(maxWidth: maxWidth)
+                            .padding(.bottom, 16)
                     }
                     .frame(maxWidth: .infinity) // 중앙 정렬
+                    // 하단 탭 바 / 홈 인디케이터에 가려지지 않도록 안전 영역만큼 여유
+                    .padding(.bottom, geometry.safeAreaInsets.bottom)
                 }
             }
         }
@@ -135,20 +140,26 @@ struct CalendarView: View {
     // ─────────────────────────────────────────
     // MARK: - 달력 섹션 (TabView 기반 스와이프)
     // ─────────────────────────────────────────
-    private var calendarSection: some View {
+    private func calendarSection(calendarHeight: CGFloat) -> some View {
         TabView(selection: $monthOffset) {
             ForEach(-12...12, id: \.self) { offset in
                 let month = getMonthDate(offset: offset)
-                MonthCalendarGrid(
-                    month: month,
-                    selectedDate: $selectedDate,
-                    neisManager: neisManager
-                )
+                VStack(spacing: 0) {
+                    // 달력은 항상 상단에 붙어 있도록 하고,
+                    // 남는 공간은 아래쪽으로만 빠지게 Spacer로 처리
+                    MonthCalendarGrid(
+                        month: month,
+                        selectedDate: $selectedDate,
+                        neisManager: neisManager
+                    )
+                    Spacer(minLength: 0)
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
                 .tag(offset)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: 380) // 고정 높이로 달력 크기 제한
+        .frame(height: calendarHeight)
     }
     
     // ─────────────────────────────────────────
@@ -422,6 +433,7 @@ private struct YearMonthPickerSheet: View {
     
     @State private var pickedYear: Int
     @State private var pickedMonth: Int
+    @State private var showYearPicker: Bool = false
     
     private static let yearRange = 2020...2030
     
@@ -440,21 +452,75 @@ private struct YearMonthPickerSheet: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Picker("연도", selection: $pickedYear) {
-                        ForEach(Self.yearRange, id: \.self) { y in
-                            Text("\(y)년").tag(y)
+            VStack(spacing: 24) {
+                // 연도 표시 + 좌우 이동/탭을 한 줄로 통합
+                HStack(spacing: 16) {
+                    Button {
+                        if let first = Self.yearRange.first, pickedYear > first {
+                            pickedYear -= 1
                         }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .frame(width: 40, height: 40)
+                            .foregroundColor(.primary)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(Circle())
                     }
                     
-                    Picker("월", selection: $pickedMonth) {
+                    Button {
+                        showYearPicker = true
+                    } label: {
+                        // LocalizedStringKey로 인한 2,024 형식 방지용으로 verbatim 사용
+                        Text(verbatim: "\(pickedYear)년")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Button {
+                        if let last = Self.yearRange.last, pickedYear < last {
+                            pickedYear += 1
+                        }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 20, weight: .semibold))
+                            .frame(width: 40, height: 40)
+                            .foregroundColor(.primary)
+                            .background(Color(.secondarySystemBackground))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.top, 8)
+                
+                // 월 선택 그리드 (3 x 4)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("월 선택")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+                    LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(1...12, id: \.self) { m in
-                            Text("\(m)월").tag(m)
+                            Button {
+                                pickedMonth = m
+                            } label: {
+                                Text("\(m)월")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(monthBackground(isSelected: pickedMonth == m))
+                                    .foregroundColor(monthForeground(isSelected: pickedMonth == m))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
+                
+                Spacer()
             }
+            .padding(.horizontal)
+            .padding(.top, 12)
             .navigationTitle("연월 설정")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -468,6 +534,47 @@ private struct YearMonthPickerSheet: View {
                     }
                 }
             }
+            .sheet(isPresented: $showYearPicker) {
+                NavigationStack {
+                    List {
+                        ForEach(Self.yearRange, id: \.self) { y in
+                            Button {
+                                pickedYear = y
+                                showYearPicker = false
+                            } label: {
+                                HStack {
+                                    // LocalizedStringKey가 숫자에 콤마 넣지 않도록 verbatim 사용
+                                    Text(verbatim: "\(y)년")
+                                        .foregroundColor(.primary)
+                                    if y == pickedYear {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.accentColor)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .navigationTitle("연도 선택")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+    }
+    
+    private func monthBackground(isSelected: Bool) -> Color {
+        if isSelected {
+            return Color.accentColor
+        } else {
+            return Color(.secondarySystemBackground)
+        }
+    }
+    
+    private func monthForeground(isSelected: Bool) -> Color {
+        if isSelected {
+            return Color.white
+        } else {
+            return Color.primary
         }
     }
     
