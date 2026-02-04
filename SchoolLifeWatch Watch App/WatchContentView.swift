@@ -25,7 +25,6 @@ struct WatchContentView: View {
     }
 }
 
-// MARK: - 급식 뷰
 struct WatchMealView: View {
     @ObservedObject var neisManager: WatchNeisManager
     
@@ -77,7 +76,6 @@ struct WatchMealView: View {
     }
 }
 
-// MARK: - 시간표 뷰
 struct WatchTimetableView: View {
     @ObservedObject var neisManager: WatchNeisManager
     

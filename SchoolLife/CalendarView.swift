@@ -1,8 +1,6 @@
 import SwiftUI
 
-// ─────────────────────────────────────────────
-// MARK: - CalendarView  (학사일정 달력)
-// ─────────────────────────────────────────────
+// MARK: - 학사일정 달력 메인 뷰
 struct CalendarView: View {
     @ObservedObject var neisManager: NeisManager
     
@@ -15,10 +13,8 @@ struct CalendarView: View {
     // 연월 설정 시트
     @State private var showYearMonthPicker = false
     
-    // ─── computed ───
     private var cal: Calendar { Calendar.current }
     
-    /// 현재 표시 중인 월 (1일 기준)
     private var displayedMonth: Date {
         let today = Date()
         let comps = cal.dateComponents([.year, .month], from: today)
@@ -26,13 +22,11 @@ struct CalendarView: View {
         return cal.date(byAdding: .month, value: monthOffset, to: thisMonth) ?? thisMonth
     }
     
-    /// 선택된 날짜의 이벤트 목록
     private var selectedEvents: [ScheduleEventRow] {
         guard let sel = selectedDate else { return [] }
         return neisManager.events(on: sel)
     }
     
-    // 월 표시 포맷
     private var monthTitle: String {
         let f = DateFormatter()
         f.dateFormat = "yyyy년 M월"
@@ -48,13 +42,10 @@ struct CalendarView: View {
             let calendarHeight: CGFloat = isIPad ? 660 : 380
             
             VStack(spacing: 0) {
-                // 헤더
                 monthNavigationHeader
                 
-                // 달력 + 이벤트 영역을 ScrollView로 감싸서 iPad에서 스크롤 가능
                 ScrollView {
                     VStack(spacing: 0) {
-                        // 달력 영역 (TabView로 페이지 스와이프)
                         calendarSection(calendarHeight: calendarHeight)
                             .frame(maxWidth: maxWidth)
                         
@@ -67,8 +58,7 @@ struct CalendarView: View {
                             .frame(maxWidth: maxWidth)
                             .padding(.bottom, 16)
                     }
-                    .frame(maxWidth: .infinity) // 중앙 정렬
-                    // 하단 탭 바 / 홈 인디케이터에 가려지지 않도록 안전 영역만큼 여유
+                    .frame(maxWidth: .infinity)
                     .padding(.bottom, geometry.safeAreaInsets.bottom)
                 }
             }
@@ -87,9 +77,7 @@ struct CalendarView: View {
         }
     }
     
-    // ─────────────────────────────────────────
-    // MARK: - 월 이동 헤더
-    // ─────────────────────────────────────────
+    // MARK: 월 이동 헤더
     private var monthNavigationHeader: some View {
         HStack {
             Button {
@@ -137,16 +125,12 @@ struct CalendarView: View {
         .padding(.horizontal)
     }
     
-    // ─────────────────────────────────────────
-    // MARK: - 달력 섹션 (TabView 기반 스와이프)
-    // ─────────────────────────────────────────
+    // MARK: 달력 섹션 (월 스와이프)
     private func calendarSection(calendarHeight: CGFloat) -> some View {
         TabView(selection: $monthOffset) {
             ForEach(-12...12, id: \.self) { offset in
                 let month = getMonthDate(offset: offset)
                 VStack(spacing: 0) {
-                    // 달력은 항상 상단에 붙어 있도록 하고,
-                    // 남는 공간은 아래쪽으로만 빠지게 Spacer로 처리
                     MonthCalendarGrid(
                         month: month,
                         selectedDate: $selectedDate,
@@ -162,9 +146,7 @@ struct CalendarView: View {
         .frame(height: calendarHeight)
     }
     
-    // ─────────────────────────────────────────
-    // MARK: - 이벤트 목록 섹션
-    // ─────────────────────────────────────────
+    // MARK: 이벤트 목록 섹션
     private var eventListSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let sel = selectedDate {
@@ -207,7 +189,6 @@ struct CalendarView: View {
         }
     }
     
-    // ─── helpers ───
     private func getMonthDate(offset: Int) -> Date {
         let today = Date()
         let comps = cal.dateComponents([.year, .month], from: today)

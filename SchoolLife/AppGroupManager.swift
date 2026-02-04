@@ -1,6 +1,5 @@
 import Foundation
 
-/// App Group ID를 동적으로 감지하는 매니저
 final class AppGroupManager {
     static let shared = AppGroupManager()
     
