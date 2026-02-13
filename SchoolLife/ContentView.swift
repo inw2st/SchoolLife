@@ -816,3 +816,7 @@ struct DebugInfoView: View {
         return formatter.string(from: date)
     }
 }
+
+#Preview {
+    ContentView()
+}
