@@ -1,0 +1,69 @@
+{
+  "" : {
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidgetExtension-primary.dia",
+    "emit-module-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidgetExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidgetExtension-primary-emit-module.dia",
+    "pch" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidgetExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidgetExtension-primary.swiftdeps"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLife/AppGroupManager.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/AppGroupManager~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLife/NeisManager.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/NeisManager~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/Widgets/MealWidget.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/MealWidget~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/Widgets/SchoolLifeWidgets.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/SchoolLifeWidgets~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/Widgets/TimetableWidget.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-iphoneos/MealWidgetExtension.build/Objects-normal/arm64/TimetableWidget~partial.swiftmodule"
+  }
+}

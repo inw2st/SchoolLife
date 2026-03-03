@@ -177,6 +177,13 @@ struct TimetableView: View {
         VStack(spacing: 0) {
 
             VStack(spacing: 12) {
+                HStack {
+                    Label(neisManager.timetableSourceDescription, systemImage: "rectangle.2.swap")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+
                 Picker("학년", selection: $neisManager.grade) {
                     Text("1학년").tag("1")
                     Text("2학년").tag("2")
@@ -221,6 +228,13 @@ struct TimetableView: View {
                         Text("시간표 데이터가 없습니다.")
                             .foregroundColor(.secondary)
                             .padding(.top, 50)
+                        if let message = neisManager.timetableMessage {
+                            Text(message)
+                                .font(.caption)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 8)
+                        }
                     } else {
                         ForEach(neisManager.timetables) { time in
                             Button {
@@ -300,8 +314,8 @@ struct TimetableView: View {
                         if mode == .replaceSubject {
                             let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                             Text(original.isEmpty
-                                 ? "NEIS 원문 과목명이 없어 치환 규칙을 만들 수 없어요."
-                                 : "'\(original)'이(가) NEIS에서 나오면 항상 아래 값으로 표시돼요.")
+                                 ? "원본 과목명이 없어 치환 규칙을 만들 수 없어요."
+                                 : "'\(original)'이(가) 시간표에 나오면 항상 아래 값으로 표시돼요.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         }
@@ -312,7 +326,7 @@ struct TimetableView: View {
                             .lineLimit(2...5)
                     }
 
-                    Section("NEIS 원문") {
+                    Section("원본 과목") {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(row.ITRT_CNTNT ?? "-")
                                 .foregroundColor(.secondary)
@@ -375,9 +389,7 @@ struct TimetableView: View {
             neisManager.setEditedTextWeekly(trimmed, for: row)
 
         case .replaceSubject:
-            let from = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !from.isEmpty else { return }
-            neisManager.setReplaceRule(from: from, to: trimmed)
+            neisManager.setReplaceRule(for: row, to: trimmed)
         }
     }
 
@@ -390,17 +402,14 @@ struct TimetableView: View {
             neisManager.clearEditedTextWeekly(for: row)
 
         case .replaceSubject:
-            let from = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !from.isEmpty { neisManager.clearReplaceRule(for: from) }
+            neisManager.clearReplaceRule(for: row)
         }
     }
 
     private func deleteAllForRow(row: TimetableRow) {
         neisManager.clearEditedTextDate(for: row)
         neisManager.clearEditedTextWeekly(for: row)
-
-        let from = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !from.isEmpty { neisManager.clearReplaceRule(for: from) }
+        neisManager.clearReplaceRule(for: row)
     }
 }
 
@@ -465,6 +474,28 @@ struct SettingsView: View {
                         Text("다크모드")
                     }
                 }
+            }
+
+            Section(header: Text("시간표 소스")) {
+                Picker(
+                    "시간표 소스",
+                    selection: Binding(
+                        get: { neisManager.timetableSource },
+                        set: { newValue in
+                            neisManager.timetableSource = newValue
+                            neisManager.fetchTimetable()
+                        }
+                    )
+                ) {
+                    ForEach(TimetableSource.allCases) { source in
+                        Text(source.title).tag(source)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("급식과 학사일정은 기존처럼 교육청 API를 사용하고, 시간표만 선택한 소스로 불러옵니다.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
 
             Section(header: Text("현재 정보")) {
@@ -817,6 +848,8 @@ struct DebugInfoView: View {
     }
 }
 
-#Preview {
-    ContentView()
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
 }

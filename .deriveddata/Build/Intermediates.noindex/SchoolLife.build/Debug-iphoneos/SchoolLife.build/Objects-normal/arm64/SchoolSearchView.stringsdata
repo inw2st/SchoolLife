@@ -1,0 +1,32 @@
+{
+  "source": "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLife/SchoolSearchView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "학교 찾기",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 33
+        }
+      },
+      {
+        "comment": "",
+        "key": "학교명을 입력하세요 (예: 강남고)",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 11
+        }
+      },
+      {
+        "comment": "",
+        "key": "닫기",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 37
+        }
+      }
+    ]
+  },
+  "version": 1
+}

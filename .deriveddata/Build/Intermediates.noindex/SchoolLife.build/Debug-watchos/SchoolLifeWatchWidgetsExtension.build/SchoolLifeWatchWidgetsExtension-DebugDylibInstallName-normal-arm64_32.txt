@@ -1,0 +1,1 @@
+@rpath/SchoolLifeWatchWidgetsExtension.debug.dylib

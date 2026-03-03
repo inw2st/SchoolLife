@@ -1,0 +1,40 @@
+{
+  "source": "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLifeWatchWidgets/WatchTimetableWidget.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "시간표",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 127
+        }
+      },
+      {
+        "comment": "",
+        "key": "시간표 없음",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "시간표",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 168
+        }
+      },
+      {
+        "comment": "",
+        "key": "오늘의 시간표",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 169
+        }
+      }
+    ]
+  },
+  "version": 1
+}

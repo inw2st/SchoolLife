@@ -1,0 +1,59 @@
+{
+  "" : {
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatch Watch App-primary.dia",
+    "emit-module-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatch Watch App-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatch Watch App-primary-emit-module.dia",
+    "pch" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatch Watch App-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatch Watch App-primary.swiftdeps"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLife/AppGroupManager.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/AppGroupManager~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLifeWatch Watch App/SchoolLifeWatchApp.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/SchoolLifeWatchApp~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLifeWatch Watch App/WatchContentView.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchContentView~partial.swiftmodule"
+  },
+  "/Users/minwestt/Documents/xcode prj/SchoolLife/SchoolLifeWatch Watch App/WatchNeisManager.swift" : {
+    "const-values" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.swiftconstvalues",
+    "dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.d",
+    "diagnostics" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.dia",
+    "index-unit-output-path" : "/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.o",
+    "llvm-bc" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.bc",
+    "object" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.o",
+    "swift-dependencies" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager.swiftdeps",
+    "swiftmodule" : "/Users/minwestt/Documents/xcode prj/SchoolLife/.deriveddata/Build/Intermediates.noindex/SchoolLife.build/Debug-watchos/SchoolLifeWatch Watch App.build/Objects-normal/arm64/WatchNeisManager~partial.swiftmodule"
+  }
+}

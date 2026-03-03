@@ -1,0 +1,56 @@
+{
+  "source": "/Users/minwestt/Documents/xcode prj/SchoolLife/Widgets/MealWidget.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "오늘 중식",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 152
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Meal Information",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 180
+        }
+      },
+      {
+        "comment": "",
+        "key": "오늘 중식",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 219
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Meal Information",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 250
+        }
+      },
+      {
+        "comment": "",
+        "key": "오늘의 급식",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "학교 급식 정보를 확인하세요",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 270
+        }
+      }
+    ]
+  },
+  "version": 1
+}

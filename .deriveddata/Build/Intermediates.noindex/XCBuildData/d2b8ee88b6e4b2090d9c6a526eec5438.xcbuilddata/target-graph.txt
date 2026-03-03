@@ -1,0 +1,8 @@
+Target dependency graph (4 targets)
+Target 'SchoolLife' in project 'SchoolLife'
+➜ Explicit dependency on target 'MealWidgetExtension' in project 'SchoolLife'
+➜ Explicit dependency on target 'SchoolLifeWatch Watch App' in project 'SchoolLife'
+Target 'SchoolLifeWatch Watch App' in project 'SchoolLife'
+➜ Explicit dependency on target 'SchoolLifeWatchWidgetsExtension' in project 'SchoolLife'
+Target 'SchoolLifeWatchWidgetsExtension' in project 'SchoolLife' (no dependencies)
+Target 'MealWidgetExtension' in project 'SchoolLife' (no dependencies)
