@@ -1,1 +1,0 @@
-SchoolLifeWatchWidgetsExtension.debug.dylib
