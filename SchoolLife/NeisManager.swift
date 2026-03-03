@@ -3,12 +3,27 @@ import SwiftUI
 import WidgetKit
 import WatchConnectivity
 
+enum TimetableSource: String, CaseIterable, Identifiable {
+    case neis
+    case comci
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .neis: return "교육청 API"
+        case .comci: return "컴시간"
+        }
+    }
+}
+
 final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published var schools: [SchoolRow] = []
     @Published var meals: [MealRow] = []
     @Published var timetables: [TimetableRow] = []
     @Published var selectedDate: Date = Date()
     @Published var timetableRawJSON: String = ""
+    @Published var timetableMessage: String? = nil
 
     @Published var scheduleEvents: [ScheduleEventRow] = []
     @Published var calendarMonthStart: Date = Date()
@@ -33,6 +48,9 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @AppStorage("savedClass", store: AppGroupManager.shared.sharedDefaults)
     var classNum: String = "1"
 
+    @AppStorage("timetableSource", store: AppGroupManager.shared.sharedDefaults)
+    private var timetableSourceRawValue: String = TimetableSource.neis.rawValue
+
     @AppStorage("isDarkMode", store: AppGroupManager.shared.sharedDefaults)
     var isDarkMode: Bool = false
 
@@ -45,6 +63,15 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @AppStorage("timetableReplaceRulesJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableReplaceRulesJSON: String = "{}"
 
+    @AppStorage("savedComciSchoolCode", store: AppGroupManager.shared.sharedDefaults)
+    private var comciSchoolCode: String = ""
+
+    @AppStorage("savedComciMappedSchoolName", store: AppGroupManager.shared.sharedDefaults)
+    private var comciMappedSchoolName: String = ""
+
+    @AppStorage("savedComciRegionName", store: AppGroupManager.shared.sharedDefaults)
+    private var comciRegionName: String = ""
+
     @Published private(set) var replaceRules: [String: String] = [:]
 
 
@@ -52,7 +79,17 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published private(set) var timetableWeeklyEdits: [String: String] = [:]
 
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
+    private let comciRelayBaseURL = "https://comci-direct-server.vercel.app"
     private var watchSession: WCSession?
+
+    var timetableSource: TimetableSource {
+        get { TimetableSource(rawValue: timetableSourceRawValue) ?? .neis }
+        set {
+            timetableSourceRawValue = newValue.rawValue
+            WidgetCenter.shared.reloadTimelines(ofKind: "TimetableWidget")
+            objectWillChange.send()
+        }
+    }
 
     override init() {
         super.init()
@@ -137,29 +174,53 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         let g = row.GRADE ?? grade
         let c = row.CLASS_NM ?? classNum
         let p = row.PERIO ?? ""
-        return "\(schoolCode)|\(d)|\(g)|\(c)|\(p)"
+        return "\(rowSchoolIdentifier(for: row))|\(d)|\(g)|\(c)|\(p)"
     }
 
-    func weeklyEditKey(perio: String) -> String {
+    func weeklyEditKey(for row: TimetableRow) -> String {
         let weekday = Calendar.current.component(.weekday, from: selectedDate)
-        return "\(schoolCode)|G\(grade)|C\(classNum)|W\(weekday)|P\(perio)"
+        let perio = row.PERIO ?? ""
+        return "\(rowSchoolIdentifier(for: row))|G\(grade)|C\(classNum)|W\(weekday)|P\(perio)"
+    }
+
+    private func rowSchoolIdentifier(for row: TimetableRow) -> String {
+        if row.SOURCE_KIND == TimetableSource.comci.rawValue {
+            let sourceID = row.SOURCE_SCHOOL_ID ?? currentTimetableSchoolIdentifier()
+            return "\(TimetableSource.comci.rawValue)|\(sourceID)"
+        }
+        return schoolCode
+    }
+
+    private func currentTimetableSchoolIdentifier() -> String {
+        switch timetableSource {
+        case .neis:
+            return schoolCode
+        case .comci:
+            return comciSchoolCode.isEmpty ? schoolName : comciSchoolCode
+        }
+    }
+
+    private func replaceRuleKey(for row: TimetableRow) -> String {
+        let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if row.SOURCE_KIND == TimetableSource.comci.rawValue {
+            return "\(TimetableSource.comci.rawValue)|\(row.SOURCE_SCHOOL_ID ?? currentTimetableSchoolIdentifier())|\(original)"
+        }
+        return original
     }
 
     func displayText(for row: TimetableRow) -> String {
-        let perio = row.PERIO ?? ""
-
         let dk = dateEditKey(for: row)
         if let edited = timetableDateEdits[dk], !edited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return edited
         }
 
-        let wk = weeklyEditKey(perio: perio)
+        let wk = weeklyEditKey(for: row)
         if let edited = timetableWeeklyEdits[wk], !edited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return edited
         }
 
-        let original = (row.ITRT_CNTNT ?? "-").trimmingCharacters(in: .whitespacesAndNewlines)
-        if let replaced = replaceRules[original], !replaced.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let replaceKey = replaceRuleKey(for: row)
+        if let replaced = replaceRules[replaceKey], !replaced.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return replaced
         }
 
@@ -167,12 +228,9 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     func hasAnyEditedText(for row: TimetableRow) -> Bool {
-        let perio = row.PERIO ?? ""
-        let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-
         return timetableDateEdits[dateEditKey(for: row)] != nil
-            || timetableWeeklyEdits[weeklyEditKey(perio: perio)] != nil
-            || (!original.isEmpty && replaceRules[original] != nil)
+            || timetableWeeklyEdits[weeklyEditKey(for: row)] != nil
+            || replaceRules[replaceRuleKey(for: row)] != nil
     }
 
 
@@ -184,8 +242,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     func setEditedTextWeekly(_ text: String, for row: TimetableRow) {
-        let perio = row.PERIO ?? ""
-        timetableWeeklyEdits[weeklyEditKey(perio: perio)] = text
+        timetableWeeklyEdits[weeklyEditKey(for: row)] = text
         saveTimetableEdits()
         objectWillChange.send()
     }
@@ -197,8 +254,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     func clearEditedTextWeekly(for row: TimetableRow) {
-        let perio = row.PERIO ?? ""
-        timetableWeeklyEdits.removeValue(forKey: weeklyEditKey(perio: perio))
+        timetableWeeklyEdits.removeValue(forKey: weeklyEditKey(for: row))
         saveTimetableEdits()
         objectWillChange.send()
     }
@@ -207,10 +263,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         clearEditedTextDate(for: row)
         clearEditedTextWeekly(for: row)
 
-        let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !original.isEmpty {
-            clearReplaceRule(for: original)
-        }
+        clearReplaceRule(for: row)
     }
 
     func setReplaceRule(from: String, to: String) {
@@ -222,6 +275,21 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     func clearReplaceRule(for from: String) {
         let key = from.trimmingCharacters(in: .whitespacesAndNewlines)
+        replaceRules.removeValue(forKey: key)
+        saveTimetableEdits()
+        objectWillChange.send()
+    }
+
+    func setReplaceRule(for row: TimetableRow, to: String) {
+        let key = replaceRuleKey(for: row)
+        guard !key.isEmpty else { return }
+        replaceRules[key] = to
+        saveTimetableEdits()
+        objectWillChange.send()
+    }
+
+    func clearReplaceRule(for row: TimetableRow) {
+        let key = replaceRuleKey(for: row)
         replaceRules.removeValue(forKey: key)
         saveTimetableEdits()
         objectWillChange.send()
@@ -261,8 +329,15 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                 defaults.set(self.schoolName, forKey: "savedSchoolName")
                 defaults.set(self.grade, forKey: "savedGrade")
                 defaults.set(self.classNum, forKey: "savedClass")
+                defaults.removeObject(forKey: "savedComciSchoolCode")
+                defaults.removeObject(forKey: "savedComciMappedSchoolName")
+                defaults.removeObject(forKey: "savedComciRegionName")
                 defaults.synchronize()
             }
+
+            self.comciSchoolCode = ""
+            self.comciMappedSchoolName = ""
+            self.comciRegionName = ""
 
             self.syncWatchContext()
 
@@ -300,50 +375,12 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     func fetchTimetable() {
-        guard !schoolCode.isEmpty else { return }
-
-        let currentOfficeCode = officeCode
-        let currentSchoolCode = schoolCode
-        let currentDate = getApiDateString()
-        let currentGrade = grade
-        let currentClass = classNum
-
-        let urlString =
-        "https://open.neis.go.kr/hub/hisTimetable?KEY=\(apiKey)&Type=json&pIndex=1&pSize=100&ATPT_OFCDC_SC_CODE=\(currentOfficeCode)&SD_SCHUL_CODE=\(currentSchoolCode)&ALL_TI_YMD=\(currentDate)&GRADE=\(currentGrade)&CLASS_NM=\(currentClass)"
-
-        guard let url = URL(string: urlString) else { return }
-
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            guard let data = data else {
-                DispatchQueue.main.async { self.timetables = [] }
-                return
-            }
-
-            if let raw = String(data: data, encoding: .utf8) {
-                DispatchQueue.main.async { self.timetableRawJSON = raw }
-                
-            }
-
-            do {
-                let decoded = try JSONDecoder().decode(NeisResponse.self, from: data)
-
-                let rows = decoded.hisTimetable?
-                    .compactMap { $0.row }
-                    .first(where: { !$0.isEmpty })
-
-                DispatchQueue.main.async {
-                    if let rows {
-                        self.timetables = rows.sorted {
-                            (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
-                        }
-                    } else {
-                        self.timetables = []
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async { self.timetables = [] }
-            }
-        }.resume()
+        switch timetableSource {
+        case .neis:
+            fetchNeisTimetable()
+        case .comci:
+            fetchComciTimetable()
+        }
     }
 
     // MARK: 학사일정 (SchoolSchedule)
@@ -374,7 +411,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         guard let url = URL(string: urlString) else { return }
 
         URLSession.shared.dataTask(with: url) { [self] data, response, error in
-            if let error = error {
+            if error != nil {
                 DispatchQueue.main.async { self.scheduleEvents = [] }
                 return
             }
@@ -442,6 +479,307 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         return text.replacingOccurrences(of: "<br/>", with: "\n")
             .replacingOccurrences(of: #"\([0-9\.]+\)"#, with: "", options: .regularExpression)
     }
+
+    var timetableSourceDescription: String {
+        timetableSource.title
+    }
+
+    private func fetchNeisTimetable() {
+        guard !schoolCode.isEmpty else { return }
+
+        let currentOfficeCode = officeCode
+        let currentSchoolCode = schoolCode
+        let currentDate = getApiDateString()
+        let currentGrade = grade
+        let currentClass = classNum
+
+        let urlString =
+        "https://open.neis.go.kr/hub/hisTimetable?KEY=\(apiKey)&Type=json&pIndex=1&pSize=100&ATPT_OFCDC_SC_CODE=\(currentOfficeCode)&SD_SCHUL_CODE=\(currentSchoolCode)&ALL_TI_YMD=\(currentDate)&GRADE=\(currentGrade)&CLASS_NM=\(currentClass)"
+
+        guard let url = URL(string: urlString) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    self.timetableMessage = nil
+                    self.timetables = []
+                }
+                return
+            }
+
+            if let raw = String(data: data, encoding: .utf8) {
+                DispatchQueue.main.async {
+                    self.timetableRawJSON = raw
+                    self.timetableMessage = nil
+                }
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(NeisResponse.self, from: data)
+
+                let rows = decoded.hisTimetable?
+                    .compactMap { $0.row }
+                    .first(where: { !$0.isEmpty })
+
+                DispatchQueue.main.async {
+                    if let rows {
+                        self.timetables = rows.sorted {
+                            (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
+                        }
+                    } else {
+                        self.timetables = []
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.timetableMessage = "교육청 시간표를 불러오지 못했습니다."
+                    self.timetables = []
+                }
+            }
+        }.resume()
+    }
+
+    private func fetchComciTimetable() {
+        guard !schoolName.isEmpty else { return }
+
+        resolveComciSchoolMapping { result in
+            switch result {
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    self.timetableMessage = error.localizedDescription
+                    self.timetableRawJSON = error.localizedDescription
+                    self.timetables = []
+                }
+            case .success(let school):
+                self.requestComciTimetable(for: school)
+            }
+        }
+    }
+
+    private func requestComciTimetable(for school: ComciResolvedSchool) {
+        guard var components = URLComponents(string: "\(comciRelayBaseURL)/timetable/verify") else { return }
+
+        let targetDate = isoDateString(from: selectedDate)
+        components.queryItems = [
+            URLQueryItem(name: "school_name", value: school.schoolName),
+            URLQueryItem(name: "region_name", value: school.regionName),
+            URLQueryItem(name: "school_code", value: school.schoolCode),
+            URLQueryItem(name: "grade", value: grade),
+            URLQueryItem(name: "class_num", value: classNum),
+            URLQueryItem(name: "target_date", value: targetDate)
+        ]
+
+        guard let url = components.url else { return }
+        URLSession.shared.dataTask(with: url) { data, response, _ in
+            guard let data else {
+                DispatchQueue.main.async {
+                    self.timetableMessage = "컴시간 시간표를 불러오지 못했습니다."
+                    self.timetableRawJSON = ""
+                    self.timetables = []
+                }
+                return
+            }
+
+            let raw = String(data: data, encoding: .utf8) ?? ""
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+
+            do {
+                if statusCode >= 400 {
+                    let errorResponse = try JSONDecoder().decode(ComciErrorResponse.self, from: data)
+                    DispatchQueue.main.async {
+                        self.timetableRawJSON = raw
+                        self.timetableMessage = errorResponse.message
+                        self.timetables = []
+                    }
+                    return
+                }
+
+                let decoded = try JSONDecoder().decode(ComciVerifyResponse.self, from: data)
+                let rows = decoded.daily_subjects.compactMap { period -> TimetableRow? in
+                    let subject = self.normalizeComciSubject(period.subject)
+                    guard !subject.isEmpty else { return nil }
+                    return TimetableRow(
+                        ALL_TI_YMD: decoded.request.target_date.replacingOccurrences(of: "-", with: ""),
+                        GRADE: self.grade,
+                        CLASS_NM: self.classNum,
+                        PERIO: String(period.period),
+                        ITRT_CNTNT: subject,
+                        SOURCE_KIND: TimetableSource.comci.rawValue,
+                        SOURCE_SCHOOL_ID: school.schoolCode
+                    )
+                }
+
+                DispatchQueue.main.async {
+                    self.timetableRawJSON = raw
+                    self.timetableMessage = rows.isEmpty ? "컴시간 시간표 데이터가 비어 있습니다." : nil
+                    self.timetables = rows.sorted {
+                        (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.timetableRawJSON = raw
+                    self.timetableMessage = "컴시간 시간표를 해석하지 못했습니다."
+                    self.timetables = []
+                }
+            }
+        }.resume()
+    }
+
+    private func resolveComciSchoolMapping(completion: @escaping (Result<ComciResolvedSchool, Error>) -> Void) {
+        let resolvedSchoolName = comciMappedSchoolName.isEmpty ? schoolName : comciMappedSchoolName
+
+        if !comciSchoolCode.isEmpty {
+            completion(.success(ComciResolvedSchool(
+                schoolCode: comciSchoolCode,
+                schoolName: resolvedSchoolName,
+                regionName: comciRegionName.isEmpty ? fallbackComciRegionName() : comciRegionName
+            )))
+            return
+        }
+
+        guard var components = URLComponents(string: "\(comciRelayBaseURL)/schools/search") else {
+            completion(.failure(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "컴시간 학교 검색 URL을 만들지 못했습니다."])))
+            return
+        }
+        components.queryItems = [URLQueryItem(name: "q", value: resolvedSchoolName)]
+
+        guard let url = components.url else {
+            completion(.failure(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "컴시간 학교 검색 URL을 만들지 못했습니다."])))
+            return
+        }
+        URLSession.shared.dataTask(with: url) { data, _, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            guard let data else {
+                completion(.failure(NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "컴시간 학교 검색 응답이 없습니다."])))
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(ComciSchoolSearchResponse.self, from: data)
+                let region = self.fallbackComciRegionName()
+                guard let match = self.findBestComciSchoolMatch(
+                    schools: decoded.schools,
+                    requestedSchoolName: self.schoolName,
+                    resolvedSchoolName: resolvedSchoolName,
+                    region: region
+                ) else {
+                    throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "컴시간에서 현재 학교를 찾지 못했습니다."])
+                }
+
+                DispatchQueue.main.async {
+                    self.comciSchoolCode = match.school_code
+                    self.comciMappedSchoolName = match.school_name
+                    self.comciRegionName = match.region_name
+                }
+
+                completion(.success(ComciResolvedSchool(
+                    schoolCode: match.school_code,
+                    schoolName: match.school_name,
+                    regionName: match.region_name
+                )))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    private func normalizeComciSubject(_ subject: String) -> String {
+        let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "" }
+        return trimmed.replacingOccurrences(of: "_", with: ".")
+    }
+
+    private func findBestComciSchoolMatch(
+        schools: [ComciSchool],
+        requestedSchoolName: String,
+        resolvedSchoolName: String,
+        region: String
+    ) -> ComciSchool? {
+        let exactRegionMatchers = [
+            resolvedSchoolName,
+            requestedSchoolName
+        ]
+
+        for name in exactRegionMatchers {
+            if let match = schools.first(where: { $0.school_name == name && ($0.region_name == region || region.isEmpty) }) {
+                return match
+            }
+        }
+
+        for name in exactRegionMatchers {
+            if let match = schools.first(where: { $0.school_name == name }) {
+                return match
+            }
+        }
+
+        let normalizedRequested = normalizeSchoolNameForComciMatch(requestedSchoolName)
+        let normalizedResolved = normalizeSchoolNameForComciMatch(resolvedSchoolName)
+
+        if let match = schools.first(where: {
+            let normalizedCandidate = normalizeSchoolNameForComciMatch($0.school_name)
+            let sameRegion = $0.region_name == region || region.isEmpty
+            return sameRegion && (
+                normalizedCandidate == normalizedRequested ||
+                normalizedCandidate == normalizedResolved ||
+                normalizedCandidate.contains(normalizedRequested) ||
+                normalizedCandidate.contains(normalizedResolved) ||
+                normalizedRequested.contains(normalizedCandidate) ||
+                normalizedResolved.contains(normalizedCandidate)
+            )
+        }) {
+            return match
+        }
+
+        if schools.count == 1 {
+            return schools.first
+        }
+
+        return nil
+    }
+
+    private func normalizeSchoolNameForComciMatch(_ name: String) -> String {
+        name
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "중학교", with: "중")
+            .replacingOccurrences(of: "고등학교", with: "고")
+            .replacingOccurrences(of: "초등학교", with: "초")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isoDateString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private func fallbackComciRegionName() -> String {
+        switch officeCode {
+        case "B10": return "서울"
+        case "C10": return "부산"
+        case "D10": return "대구"
+        case "E10": return "인천"
+        case "F10": return "광주"
+        case "G10": return "대전"
+        case "H10": return "울산"
+        case "I10": return "세종"
+        case "J10": return "경기"
+        case "K10": return "강원"
+        case "M10": return "충북"
+        case "N10": return "충남"
+        case "P10": return "전북"
+        case "Q10": return "전남"
+        case "R10": return "경북"
+        case "S10": return "경남"
+        case "T10": return "제주"
+        default: return ""
+        }
+    }
     
     // 🔧 워치 통신 테스트용 (아이폰 → 워치)
     func debugWriteForWatch() {
@@ -504,13 +842,78 @@ struct ResultInfo: Codable {
 
 struct TimetableRow: Codable, Identifiable {
     var id: String {
-        "\(ALL_TI_YMD ?? "")\(GRADE ?? "")\(CLASS_NM ?? "")\(PERIO ?? "")"
+        "\(SOURCE_KIND ?? TimetableSource.neis.rawValue)|\(SOURCE_SCHOOL_ID ?? "")|\(ALL_TI_YMD ?? "")\(GRADE ?? "")\(CLASS_NM ?? "")\(PERIO ?? "")"
     }
     let ALL_TI_YMD: String?
     let GRADE: String?
     let CLASS_NM: String?
     let PERIO: String?
     let ITRT_CNTNT: String?
+    let SOURCE_KIND: String?
+    let SOURCE_SCHOOL_ID: String?
+}
+
+struct ComciResolvedSchool {
+    let schoolCode: String
+    let schoolName: String
+    let regionName: String
+}
+
+struct ComciSchoolSearchResponse: Decodable {
+    let schools: [ComciSchool]
+}
+
+struct ComciSchool: Decodable {
+    let school_code: String
+    let region_name: String
+    let school_name: String
+
+    private enum CodingKeys: String, CodingKey {
+        case school_code, region_name, school_name
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        school_code = try container.decodeLossyString(forKey: .school_code)
+        region_name = try container.decodeLossyString(forKey: .region_name)
+        school_name = try container.decodeLossyString(forKey: .school_name)
+    }
+}
+
+struct ComciVerifyResponse: Decodable {
+    let request: ComciVerifyRequest
+    let daily_subjects: [ComciPeriod]
+}
+
+struct ComciVerifyRequest: Decodable {
+    let target_date: String
+}
+
+struct ComciPeriod: Decodable {
+    let period: Int
+    let subject: String
+}
+
+struct ComciErrorResponse: Decodable {
+    let message: String
+}
+
+private extension KeyedDecodingContainer {
+    func decodeLossyString(forKey key: Key) throws -> String {
+        if let stringValue = try decodeIfPresent(String.self, forKey: key) {
+            return stringValue
+        }
+        if let intValue = try decodeIfPresent(Int.self, forKey: key) {
+            return String(intValue)
+        }
+        if let doubleValue = try decodeIfPresent(Double.self, forKey: key) {
+            if doubleValue.rounded() == doubleValue {
+                return String(Int(doubleValue))
+            }
+            return String(doubleValue)
+        }
+        throw DecodingError.keyNotFound(key, .init(codingPath: codingPath, debugDescription: "Value missing for key \(key.stringValue)"))
+    }
 }
 
 // ─────────────────────────────────────────────
