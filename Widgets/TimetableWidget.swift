@@ -132,13 +132,15 @@ struct TimetableProvider: TimelineProvider {
                     let dateKey = "\(schoolCode)|\(ymd)|\(grade)|\(classNum)|\(perio)"
                     let weekday = Calendar.current.component(.weekday, from: Date())
                     let weeklyKey = "\(schoolCode)|G\(grade)|C\(classNum)|W\(weekday)|P\(perio)"
+                    let replaceScope = "\(WidgetTimetableSource.neis.rawValue)|\(schoolCode)|G\(grade)|C\(classNum)"
+                    let replaceKey = "\(replaceScope)|SUBJECT|\(original)"
 
                     let subject: String
                     if let v = dateEdits[dateKey], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         subject = v
                     } else if let v = weeklyEdits[weeklyKey], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         subject = v
-                    } else if let v = replaceRules[original], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    } else if let v = replaceRules[replaceKey], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         subject = v
                     } else {
                         subject = original.isEmpty ? "-" : original
@@ -212,7 +214,8 @@ struct TimetableProvider: TimelineProvider {
                         let dateKey = "\(sourceID)|\(ymd)|\(grade)|\(classNum)|\(period.period)"
                         let weekday = Calendar.current.component(.weekday, from: Date())
                         let weeklyKey = "\(sourceID)|G\(grade)|C\(classNum)|W\(weekday)|P\(period.period)"
-                        let replaceKey = "\(sourceID)|\(original)"
+                        let replaceScope = "\(WidgetTimetableSource.comci.rawValue)|\(school.schoolCode)|G\(grade)|C\(classNum)"
+                        let replaceKey = "\(replaceScope)|SUBJECT|\(original)"
 
                         let subject: String
                         if let value = dateEdits[dateKey], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
