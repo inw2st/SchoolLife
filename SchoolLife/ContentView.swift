@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import UniformTypeIdentifiers
 
 enum AppTab: String {
     case meal
@@ -160,7 +161,7 @@ struct TimetableView: View {
             switch self {
             case .todayOnly: return "이 날짜의 이 교시만 변경"
             case .weekly: return "같은 요일/교시 전부 변경"
-            case .replaceSubject: return "같은 과목명은 전부 변경"
+            case .replaceSubject: return "현재 학교/학년/반에서 같은 과목명 전부 변경"
             }
         }
 
@@ -463,6 +464,14 @@ struct SettingsView: View {
     @State private var showDebugInfo = false
     @State private var showSchoolSearch = false
     @State private var showGradeClassEdit = false
+    @State private var exportDocument: TimetableEditsDocument?
+    @State private var exportFileName: String = "timetable-edits.json"
+    @State private var showExporter = false
+    @State private var showImporter = false
+    @State private var notice: SettingsNotice?
+    @State private var showResetTargetDialog = false
+    @State private var pendingResetTarget: TimetableEditResetTarget?
+    @State private var showResetConfirmation = false
 
     var body: some View {
         List {
@@ -521,6 +530,48 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section(header: Text("시간표 수정사항")) {
+                Button {
+                    do {
+                        let data = try neisManager.exportCurrentTimetableEditsData()
+                        exportFileName = neisManager.currentTimetableEditExportFileName()
+                        exportDocument = TimetableEditsDocument(data: data)
+                        showExporter = true
+                    } catch {
+                        notice = SettingsNotice(message: error.localizedDescription)
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundColor(.blue)
+                        Text("수정사항 내보내기")
+                    }
+                }
+
+                Button {
+                    showImporter = true
+                } label: {
+                    HStack {
+                        Image(systemName: "square.and.arrow.down")
+                            .foregroundColor(.green)
+                        Text("수정사항 불러오기")
+                    }
+                }
+
+                Button(role: .destructive) {
+                    showResetTargetDialog = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("변경사항 초기화")
+                    }
+                }
+
+                Text("현재 선택된 학교, 학년, 반, 시간표 소스에 맞는 수정사항만 내보내고 불러옵니다.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             Section(header: Text("개발자 정보")) {
                 Button {
@@ -548,6 +599,105 @@ struct SettingsView: View {
         .sheet(isPresented: $showGradeClassEdit) {
             GradeClassEditView(neisManager: neisManager)
         }
+        .fileExporter(
+            isPresented: $showExporter,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: exportFileName
+        ) { result in
+            switch result {
+            case .success:
+                notice = SettingsNotice(message: "수정사항을 내보냈습니다.")
+            case .failure(let error):
+                notice = SettingsNotice(message: "내보내기에 실패했습니다: \(error.localizedDescription)")
+            }
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json]
+        ) { result in
+            switch result {
+            case .failure(let error):
+                notice = SettingsNotice(message: "불러오기에 실패했습니다: \(error.localizedDescription)")
+            case .success(let url):
+                let started = url.startAccessingSecurityScopedResource()
+                defer {
+                    if started { url.stopAccessingSecurityScopedResource() }
+                }
+
+                do {
+                    let data = try Data(contentsOf: url)
+                    try neisManager.importTimetableEdits(from: data)
+                    notice = SettingsNotice(message: "수정사항을 불러왔습니다.")
+                } catch {
+                    notice = SettingsNotice(message: error.localizedDescription)
+                }
+            }
+        }
+        .confirmationDialog(
+            "어떤 변경사항을 초기화할까요?",
+            isPresented: $showResetTargetDialog,
+            titleVisibility: .visible
+        ) {
+            ForEach(TimetableEditResetTarget.allCases) { target in
+                Button(target.title, role: .destructive) {
+                    pendingResetTarget = target
+                    showResetConfirmation = true
+                }
+            }
+            Button("취소", role: .cancel) { }
+        } message: {
+            Text("현재 학교, 학년, 반에 귀속된 수정사항만 대상으로 합니다.")
+        }
+        .alert(
+            pendingResetTarget?.title ?? "변경사항 초기화",
+            isPresented: $showResetConfirmation,
+            presenting: pendingResetTarget
+        ) { target in
+            Button("취소", role: .cancel) {
+                pendingResetTarget = nil
+            }
+            Button("초기화", role: .destructive) {
+                neisManager.clearCurrentTimetableEdits(target)
+                notice = SettingsNotice(message: "\(target.title)을 완료했습니다.")
+                pendingResetTarget = nil
+            }
+        } message: { target in
+            Text("초기화하시겠습니까?\n\(target.summary)\n되돌릴 수 없습니다.")
+        }
+        .alert(item: $notice) { notice in
+            Alert(
+                title: Text("시간표 수정사항"),
+                message: Text(notice.message),
+                dismissButton: .default(Text("확인"))
+            )
+        }
+    }
+}
+
+struct SettingsNotice: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
+struct TimetableEditsDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }
 

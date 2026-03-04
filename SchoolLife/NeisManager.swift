@@ -17,6 +17,33 @@ enum TimetableSource: String, CaseIterable, Identifiable {
     }
 }
 
+enum TimetableEditResetTarget: String, CaseIterable, Identifiable {
+    case todayOnly
+    case weekly
+    case replaceSubject
+    case all
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .todayOnly: return "오늘만 수정 초기화"
+        case .weekly: return "매주 수정 초기화"
+        case .replaceSubject: return "동일 이름 전체 교체 초기화"
+        case .all: return "현재 반 수정 전체 초기화"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .todayOnly: return "현재 학교/학년/반의 날짜별 수정만 삭제합니다."
+        case .weekly: return "현재 학교/학년/반의 요일 반복 수정만 삭제합니다."
+        case .replaceSubject: return "현재 학교/학년/반의 동일 이름 전체 교체만 삭제합니다."
+        case .all: return "현재 학교/학년/반의 모든 시간표 수정사항을 삭제합니다."
+        }
+    }
+}
+
 final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published var schools: [SchoolRow] = []
     @Published var meals: [MealRow] = []
@@ -82,6 +109,8 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     private let comciRelayBaseURL = "https://comci-direct-server.vercel.app"
     private var watchSession: WCSession?
 
+    private let replaceRuleMarker = "|SUBJECT|"
+
     var timetableSource: TimetableSource {
         get { TimetableSource(rawValue: timetableSourceRawValue) ?? .neis }
         set {
@@ -146,6 +175,8 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         } else {
             replaceRules = [:]
         }
+
+        migrateLegacyReplaceRulesIfNeeded()
     }
 
     private func saveTimetableEdits() {
@@ -166,6 +197,47 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
         WidgetCenter.shared.reloadAllTimelines()
         syncWatchContext()
+    }
+
+    private func migrateLegacyReplaceRulesIfNeeded() {
+        var migrated = replaceRules
+        var didChange = false
+
+        for (key, value) in replaceRules {
+            guard parsedReplaceRuleKey(key) == nil else { continue }
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedValue.isEmpty else { continue }
+
+            if timetableSource == .comci, key.hasPrefix("comci|") {
+                let parts = key.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+                guard parts.count >= 3 else { continue }
+                let schoolIdentifier = parts.dropLast(1).joined(separator: "|")
+                let subject = parts.last ?? ""
+                guard schoolIdentifier == currentDateWeeklySchoolIdentifier() else { continue }
+
+                let scopedKey = "\(currentReplaceRuleScopeIdentifier())\(replaceRuleMarker)\(subject)"
+                if migrated[scopedKey] == nil {
+                    migrated[scopedKey] = trimmedValue
+                }
+                migrated.removeValue(forKey: key)
+                didChange = true
+                continue
+            }
+
+            if timetableSource == .neis, !key.contains("|") {
+                let scopedKey = "\(currentReplaceRuleScopeIdentifier())\(replaceRuleMarker)\(key)"
+                if migrated[scopedKey] == nil {
+                    migrated[scopedKey] = trimmedValue
+                }
+                migrated.removeValue(forKey: key)
+                didChange = true
+            }
+        }
+
+        if didChange {
+            replaceRules = migrated
+            saveTimetableEdits()
+        }
     }
 
 
@@ -202,10 +274,31 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     private func replaceRuleKey(for row: TimetableRow) -> String {
         let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return "" }
+        return "\(replaceRuleScopeIdentifier(for: row))\(replaceRuleMarker)\(original)"
+    }
+
+    private func replaceRuleScopeIdentifier(for row: TimetableRow) -> String {
+        let rowGrade = row.GRADE ?? grade
+        let rowClass = row.CLASS_NM ?? classNum
+        let schoolIdentifier: String
+        let sourceIdentifier: String
+
         if row.SOURCE_KIND == TimetableSource.comci.rawValue {
-            return "\(TimetableSource.comci.rawValue)|\(row.SOURCE_SCHOOL_ID ?? currentTimetableSchoolIdentifier())|\(original)"
+            sourceIdentifier = TimetableSource.comci.rawValue
+            schoolIdentifier = row.SOURCE_SCHOOL_ID ?? currentTimetableSchoolIdentifier()
+        } else {
+            sourceIdentifier = TimetableSource.neis.rawValue
+            schoolIdentifier = schoolCode
         }
-        return original
+
+        return "\(sourceIdentifier)|\(schoolIdentifier)|G\(rowGrade)|C\(rowClass)"
+    }
+
+    private func currentReplaceRuleScopeIdentifier() -> String {
+        let sourceIdentifier = timetableSource.rawValue
+        let schoolIdentifier = timetableSource == .comci ? currentTimetableSchoolIdentifier() : schoolCode
+        return "\(sourceIdentifier)|\(schoolIdentifier)|G\(grade)|C\(classNum)"
     }
 
     func displayText(for row: TimetableRow) -> String {
@@ -292,6 +385,157 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         let key = replaceRuleKey(for: row)
         replaceRules.removeValue(forKey: key)
         saveTimetableEdits()
+        objectWillChange.send()
+    }
+
+    private func currentDateWeeklySchoolIdentifier() -> String {
+        switch timetableSource {
+        case .neis:
+            return schoolCode
+        case .comci:
+            return "comci|\(currentTimetableSchoolIdentifier())"
+        }
+    }
+
+    private func parsedDateEditKey(_ key: String) -> (schoolIdentifier: String, grade: String, classNum: String)? {
+        let parts = key.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 5 else { return nil }
+        return (
+            schoolIdentifier: parts.dropLast(4).joined(separator: "|"),
+            grade: parts[parts.count - 3],
+            classNum: parts[parts.count - 2]
+        )
+    }
+
+    private func parsedWeeklyEditKey(_ key: String) -> (schoolIdentifier: String, grade: String, classNum: String)? {
+        let parts = key.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 5 else { return nil }
+        let rawGrade = parts[parts.count - 4]
+        let rawClass = parts[parts.count - 3]
+        return (
+            schoolIdentifier: parts.dropLast(4).joined(separator: "|"),
+            grade: rawGrade.hasPrefix("G") ? String(rawGrade.dropFirst()) : rawGrade,
+            classNum: rawClass.hasPrefix("C") ? String(rawClass.dropFirst()) : rawClass
+        )
+    }
+
+    private func parsedReplaceRuleKey(_ key: String) -> (scopeIdentifier: String, original: String)? {
+        guard let range = key.range(of: replaceRuleMarker, options: .backwards) else { return nil }
+        return (
+            scopeIdentifier: String(key[..<range.lowerBound]),
+            original: String(key[range.upperBound...])
+        )
+    }
+
+    private func currentScopedDateEdits() -> [String: String] {
+        let expectedSchoolIdentifier = currentDateWeeklySchoolIdentifier()
+        return timetableDateEdits.filter { entry in
+            guard let parsed = parsedDateEditKey(entry.key) else { return false }
+            return parsed.schoolIdentifier == expectedSchoolIdentifier
+                && parsed.grade == grade
+                && parsed.classNum == classNum
+        }
+    }
+
+    private func currentScopedWeeklyEdits() -> [String: String] {
+        let expectedSchoolIdentifier = currentDateWeeklySchoolIdentifier()
+        return timetableWeeklyEdits.filter { entry in
+            guard let parsed = parsedWeeklyEditKey(entry.key) else { return false }
+            return parsed.schoolIdentifier == expectedSchoolIdentifier
+                && parsed.grade == grade
+                && parsed.classNum == classNum
+        }
+    }
+
+    private func currentScopedReplaceRules() -> [String: String] {
+        let expectedScope = currentReplaceRuleScopeIdentifier()
+        return replaceRules.filter { entry in
+            guard let parsed = parsedReplaceRuleKey(entry.key) else { return false }
+            return parsed.scopeIdentifier == expectedScope
+        }
+    }
+
+    private func currentTimetableEditExportScope() -> TimetableEditExportScope {
+        TimetableEditExportScope(
+            source: timetableSource.rawValue,
+            schoolIdentifier: timetableSource == .comci ? currentTimetableSchoolIdentifier() : schoolCode,
+            schoolName: schoolName,
+            grade: grade,
+            classNum: classNum
+        )
+    }
+
+    func currentTimetableEditExportFileName() -> String {
+        let safeSchoolName = schoolName.isEmpty ? "school" : schoolName.replacingOccurrences(of: " ", with: "")
+        return "timetable-edits-\(safeSchoolName)-\(grade)-\(classNum)-\(timetableSource.rawValue).json"
+    }
+
+    func exportCurrentTimetableEditsData() throws -> Data {
+        let dateEdits = currentScopedDateEdits()
+        let weeklyEdits = currentScopedWeeklyEdits()
+        let replaceRules = currentScopedReplaceRules()
+
+        guard !dateEdits.isEmpty || !weeklyEdits.isEmpty || !replaceRules.isEmpty else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "내보낼 수정사항이 없습니다."])
+        }
+
+        let payload = TimetableEditExportPayload(
+            version: 1,
+            exportedAt: ISO8601DateFormatter().string(from: Date()),
+            scope: currentTimetableEditExportScope(),
+            dateEdits: dateEdits,
+            weeklyEdits: weeklyEdits,
+            replaceRules: replaceRules
+        )
+
+        return try JSONEncoder.prettyPrinted.encode(payload)
+    }
+
+    func importTimetableEdits(from data: Data) throws {
+        let payload = try JSONDecoder().decode(TimetableEditExportPayload.self, from: data)
+        let currentScope = currentTimetableEditExportScope()
+
+        guard payload.scope.source == currentScope.source else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "시간표 소스가 달라 불러올 수 없습니다."])
+        }
+        guard payload.scope.grade == currentScope.grade, payload.scope.classNum == currentScope.classNum else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "학년 또는 반이 달라 불러올 수 없습니다."])
+        }
+
+        let sameSchool = payload.scope.schoolIdentifier == currentScope.schoolIdentifier
+            || (!payload.scope.schoolName.isEmpty && payload.scope.schoolName == currentScope.schoolName)
+        guard sameSchool else {
+            throw NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "현재 선택된 학교와 수정사항 파일의 학교가 다릅니다."])
+        }
+
+        for (key, value) in payload.dateEdits { timetableDateEdits[key] = value }
+        for (key, value) in payload.weeklyEdits { timetableWeeklyEdits[key] = value }
+        for (key, value) in payload.replaceRules { replaceRules[key] = value }
+
+        saveTimetableEdits()
+        fetchTimetable()
+        objectWillChange.send()
+    }
+
+    func clearCurrentTimetableEdits(_ target: TimetableEditResetTarget) {
+        switch target {
+        case .todayOnly:
+            timetableDateEdits = timetableDateEdits.filter { !currentScopedDateEdits().keys.contains($0.key) }
+        case .weekly:
+            timetableWeeklyEdits = timetableWeeklyEdits.filter { !currentScopedWeeklyEdits().keys.contains($0.key) }
+        case .replaceSubject:
+            replaceRules = replaceRules.filter { !currentScopedReplaceRules().keys.contains($0.key) }
+        case .all:
+            let dateKeys = Set(currentScopedDateEdits().keys)
+            let weeklyKeys = Set(currentScopedWeeklyEdits().keys)
+            let replaceKeys = Set(currentScopedReplaceRules().keys)
+            timetableDateEdits = timetableDateEdits.filter { !dateKeys.contains($0.key) }
+            timetableWeeklyEdits = timetableWeeklyEdits.filter { !weeklyKeys.contains($0.key) }
+            replaceRules = replaceRules.filter { !replaceKeys.contains($0.key) }
+        }
+
+        saveTimetableEdits()
+        fetchTimetable()
         objectWillChange.send()
     }
 
@@ -898,6 +1142,23 @@ struct ComciErrorResponse: Decodable {
     let message: String
 }
 
+struct TimetableEditExportPayload: Codable {
+    let version: Int
+    let exportedAt: String
+    let scope: TimetableEditExportScope
+    let dateEdits: [String: String]
+    let weeklyEdits: [String: String]
+    let replaceRules: [String: String]
+}
+
+struct TimetableEditExportScope: Codable {
+    let source: String
+    let schoolIdentifier: String
+    let schoolName: String
+    let grade: String
+    let classNum: String
+}
+
 private extension KeyedDecodingContainer {
     func decodeLossyString(forKey key: Key) throws -> String {
         if let stringValue = try decodeIfPresent(String.self, forKey: key) {
@@ -913,6 +1174,14 @@ private extension KeyedDecodingContainer {
             return String(doubleValue)
         }
         throw DecodingError.keyNotFound(key, .init(codingPath: codingPath, debugDescription: "Value missing for key \(key.stringValue)"))
+    }
+}
+
+private extension JSONEncoder {
+    static var prettyPrinted: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
     }
 }
 
