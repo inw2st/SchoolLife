@@ -99,6 +99,9 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @AppStorage("savedComciRegionName", store: AppGroupManager.shared.sharedDefaults)
     private var comciRegionName: String = ""
 
+    @AppStorage("comciWeeklyTimetableCacheJSON", store: AppGroupManager.shared.sharedDefaults)
+    private var comciWeeklyTimetableCacheJSON: String = "{}"
+
     @Published private(set) var replaceRules: [String: String] = [:]
 
 
@@ -108,8 +111,11 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
     private let comciRelayBaseURL = "https://comci-direct-server.vercel.app"
     private var watchSession: WCSession?
+    private var comciWeeklyCache: [String: ComciWeeklyCacheEntry] = [:]
 
     private let replaceRuleMarker = "|SUBJECT|"
+    private let comciWeeklyCacheMaxEntries = 24
+    private let comciWeeklyCacheFreshHours: TimeInterval = 6 * 60 * 60
 
     var timetableSource: TimetableSource {
         get { TimetableSource(rawValue: timetableSourceRawValue) ?? .neis }
@@ -124,6 +130,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         super.init()
         configureWatchSession()
         loadTimetableEditsIfNeeded()
+        loadComciWeeklyCacheIfNeeded()
     }
 
     private func configureWatchSession() {
@@ -197,6 +204,32 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
         WidgetCenter.shared.reloadAllTimelines()
         syncWatchContext()
+    }
+
+    private func loadComciWeeklyCacheIfNeeded() {
+        guard let data = comciWeeklyTimetableCacheJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String: ComciWeeklyCacheEntry].self, from: data) else {
+            comciWeeklyCache = [:]
+            return
+        }
+        comciWeeklyCache = decoded
+    }
+
+    private func saveComciWeeklyCache() {
+        pruneComciWeeklyCacheIfNeeded()
+        if let data = try? JSONEncoder().encode(comciWeeklyCache),
+           let json = String(data: data, encoding: .utf8) {
+            comciWeeklyTimetableCacheJSON = json
+        }
+    }
+
+    private func pruneComciWeeklyCacheIfNeeded() {
+        guard comciWeeklyCache.count > comciWeeklyCacheMaxEntries else { return }
+        let sortedKeys = comciWeeklyCache
+            .sorted { $0.value.fetchedAt > $1.value.fetchedAt }
+            .map(\.key)
+        let keepKeys = Set(sortedKeys.prefix(comciWeeklyCacheMaxEntries))
+        comciWeeklyCache = comciWeeklyCache.filter { keepKeys.contains($0.key) }
     }
 
     private func migrateLegacyReplaceRulesIfNeeded() {
@@ -795,6 +828,16 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                     self.timetables = []
                 }
             case .success(let school):
+                let cacheKey = self.comciWeeklyCacheKey(for: school, grade: self.grade, classNum: self.classNum, date: self.selectedDate)
+                if let cached = self.comciWeeklyCache[cacheKey] {
+                    DispatchQueue.main.async {
+                        self.applyComciWeeklyCache(cached, school: school)
+                    }
+
+                    if Date().timeIntervalSince(cached.fetchedAtDate) < self.comciWeeklyCacheFreshHours {
+                        return
+                    }
+                }
                 self.requestComciTimetable(for: school)
             }
         }
@@ -839,26 +882,24 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                 }
 
                 let decoded = try JSONDecoder().decode(ComciVerifyResponse.self, from: data)
-                let rows = decoded.daily_subjects.compactMap { period -> TimetableRow? in
-                    let subject = self.normalizeComciSubject(period.subject)
-                    guard !subject.isEmpty else { return nil }
-                    return TimetableRow(
-                        ALL_TI_YMD: decoded.request.target_date.replacingOccurrences(of: "-", with: ""),
-                        GRADE: self.grade,
-                        CLASS_NM: self.classNum,
-                        PERIO: String(period.period),
-                        ITRT_CNTNT: subject,
-                        SOURCE_KIND: TimetableSource.comci.rawValue,
-                        SOURCE_SCHOOL_ID: school.schoolCode
-                    )
-                }
+                let weekStart = self.startOfWeekISODate(for: self.selectedDate)
+                let cacheKey = self.comciWeeklyCacheKey(for: school, grade: self.grade, classNum: self.classNum, date: self.selectedDate)
+                let cacheEntry = ComciWeeklyCacheEntry(
+                    schoolCode: school.schoolCode,
+                    schoolName: school.schoolName,
+                    regionName: school.regionName,
+                    grade: self.grade,
+                    classNum: self.classNum,
+                    weekStart: weekStart,
+                    fetchedAt: ISO8601DateFormatter().string(from: Date()),
+                    weeklyGrid: decoded.weekly_grid
+                )
 
                 DispatchQueue.main.async {
+                    self.comciWeeklyCache[cacheKey] = cacheEntry
+                    self.saveComciWeeklyCache()
                     self.timetableRawJSON = raw
-                    self.timetableMessage = rows.isEmpty ? "컴시간 시간표 데이터가 비어 있습니다." : nil
-                    self.timetables = rows.sorted {
-                        (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
-                    }
+                    self.applyComciWeeklyCache(cacheEntry, school: school)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -935,6 +976,48 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "" }
         return trimmed.replacingOccurrences(of: "_", with: ".")
+    }
+
+    private func comciWeeklyCacheKey(for school: ComciResolvedSchool, grade: String, classNum: String, date: Date) -> String {
+        let weekStart = startOfWeekISODate(for: date)
+        return "comci|\(school.schoolCode)|G\(grade)|C\(classNum)|W\(weekStart)"
+    }
+
+    private func startOfWeekISODate(for date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "ko_KR")
+        calendar.firstWeekday = 2
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
+        return isoDateString(from: weekStart)
+    }
+
+    private func weekdayIndexForSelectedDate() -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.firstWeekday = 2
+        return max(0, calendar.component(.weekday, from: selectedDate) - 2)
+    }
+
+    private func applyComciWeeklyCache(_ cacheEntry: ComciWeeklyCacheEntry, school: ComciResolvedSchool) {
+        let weekdayIndex = weekdayIndexForSelectedDate()
+        let periods = cacheEntry.weeklyGrid.first(where: { $0.weekday_index == weekdayIndex })?.periods ?? []
+        let rows = periods.compactMap { period -> TimetableRow? in
+            let subject = normalizeComciSubject(period.subject)
+            guard !subject.isEmpty else { return nil }
+            return TimetableRow(
+                ALL_TI_YMD: getApiDateString(),
+                GRADE: cacheEntry.grade,
+                CLASS_NM: cacheEntry.classNum,
+                PERIO: String(period.period),
+                ITRT_CNTNT: subject,
+                SOURCE_KIND: TimetableSource.comci.rawValue,
+                SOURCE_SCHOOL_ID: school.schoolCode
+            )
+        }
+
+        timetableMessage = rows.isEmpty ? "컴시간 시간표 데이터가 비어 있습니다." : nil
+        timetables = rows.sorted {
+            (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
+        }
     }
 
     private func findBestComciSchoolMatch(
@@ -1127,15 +1210,37 @@ struct ComciSchool: Decodable {
 struct ComciVerifyResponse: Decodable {
     let request: ComciVerifyRequest
     let daily_subjects: [ComciPeriod]
+    let weekly_grid: [ComciWeeklyDay]
 }
 
 struct ComciVerifyRequest: Decodable {
     let target_date: String
 }
 
-struct ComciPeriod: Decodable {
+struct ComciPeriod: Codable {
     let period: Int
     let subject: String
+}
+
+struct ComciWeeklyDay: Codable {
+    let weekday_index: Int
+    let weekday_name_ko: String
+    let periods: [ComciPeriod]
+}
+
+struct ComciWeeklyCacheEntry: Codable {
+    let schoolCode: String
+    let schoolName: String
+    let regionName: String
+    let grade: String
+    let classNum: String
+    let weekStart: String
+    let fetchedAt: String
+    let weeklyGrid: [ComciWeeklyDay]
+
+    var fetchedAtDate: Date {
+        ISO8601DateFormatter().date(from: fetchedAt) ?? .distantPast
+    }
 }
 
 struct ComciErrorResponse: Decodable {

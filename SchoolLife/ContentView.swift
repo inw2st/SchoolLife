@@ -468,10 +468,9 @@ struct SettingsView: View {
     @State private var exportFileName: String = "timetable-edits.json"
     @State private var showExporter = false
     @State private var showImporter = false
-    @State private var notice: SettingsNotice?
+    @State private var activeAlert: SettingsAlertState?
     @State private var showResetTargetDialog = false
     @State private var pendingResetTarget: TimetableEditResetTarget?
-    @State private var showResetConfirmation = false
 
     var body: some View {
         List {
@@ -539,7 +538,7 @@ struct SettingsView: View {
                         exportDocument = TimetableEditsDocument(data: data)
                         showExporter = true
                     } catch {
-                        notice = SettingsNotice(message: error.localizedDescription)
+                        activeAlert = .notice(message: error.localizedDescription)
                     }
                 } label: {
                     HStack {
@@ -607,9 +606,9 @@ struct SettingsView: View {
         ) { result in
             switch result {
             case .success:
-                notice = SettingsNotice(message: "수정사항을 내보냈습니다.")
+                activeAlert = .notice(message: "수정사항을 내보냈습니다.")
             case .failure(let error):
-                notice = SettingsNotice(message: "내보내기에 실패했습니다: \(error.localizedDescription)")
+                activeAlert = .notice(message: "내보내기에 실패했습니다: \(error.localizedDescription)")
             }
         }
         .fileImporter(
@@ -618,7 +617,7 @@ struct SettingsView: View {
         ) { result in
             switch result {
             case .failure(let error):
-                notice = SettingsNotice(message: "불러오기에 실패했습니다: \(error.localizedDescription)")
+                activeAlert = .notice(message: "불러오기에 실패했습니다: \(error.localizedDescription)")
             case .success(let url):
                 let started = url.startAccessingSecurityScopedResource()
                 defer {
@@ -628,9 +627,9 @@ struct SettingsView: View {
                 do {
                     let data = try Data(contentsOf: url)
                     try neisManager.importTimetableEdits(from: data)
-                    notice = SettingsNotice(message: "수정사항을 불러왔습니다.")
+                    activeAlert = .notice(message: "수정사항을 불러왔습니다.")
                 } catch {
-                    notice = SettingsNotice(message: error.localizedDescription)
+                    activeAlert = .notice(message: error.localizedDescription)
                 }
             }
         }
@@ -642,42 +641,51 @@ struct SettingsView: View {
             ForEach(TimetableEditResetTarget.allCases) { target in
                 Button(target.title, role: .destructive) {
                     pendingResetTarget = target
-                    showResetConfirmation = true
+                    activeAlert = .resetConfirmation(target: target)
                 }
             }
             Button("취소", role: .cancel) { }
         } message: {
             Text("현재 학교, 학년, 반에 귀속된 수정사항만 대상으로 합니다.")
         }
-        .alert(
-            pendingResetTarget?.title ?? "변경사항 초기화",
-            isPresented: $showResetConfirmation,
-            presenting: pendingResetTarget
-        ) { target in
-            Button("취소", role: .cancel) {
-                pendingResetTarget = nil
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case .notice(let message):
+                return Alert(
+                    title: Text("시간표 수정사항"),
+                    message: Text(message),
+                    dismissButton: .default(Text("확인"))
+                )
+            case .resetConfirmation(let target):
+                return Alert(
+                    title: Text(target.title),
+                    message: Text("초기화하시겠습니까?\n\(target.summary)\n되돌릴 수 없습니다."),
+                    primaryButton: .destructive(Text("초기화")) {
+                        neisManager.clearCurrentTimetableEdits(target)
+                        activeAlert = .notice(message: "\(target.title)을 완료했습니다.")
+                        pendingResetTarget = nil
+                    },
+                    secondaryButton: .cancel {
+                        pendingResetTarget = nil
+                    }
+                )
             }
-            Button("초기화", role: .destructive) {
-                neisManager.clearCurrentTimetableEdits(target)
-                notice = SettingsNotice(message: "\(target.title)을 완료했습니다.")
-                pendingResetTarget = nil
-            }
-        } message: { target in
-            Text("초기화하시겠습니까?\n\(target.summary)\n되돌릴 수 없습니다.")
-        }
-        .alert(item: $notice) { notice in
-            Alert(
-                title: Text("시간표 수정사항"),
-                message: Text(notice.message),
-                dismissButton: .default(Text("확인"))
-            )
         }
     }
 }
 
-struct SettingsNotice: Identifiable {
-    let id = UUID()
-    let message: String
+enum SettingsAlertState: Identifiable {
+    case notice(message: String)
+    case resetConfirmation(target: TimetableEditResetTarget)
+
+    var id: String {
+        switch self {
+        case .notice(let message):
+            return "notice:\(message)"
+        case .resetConfirmation(let target):
+            return "reset:\(target.rawValue)"
+        }
+    }
 }
 
 struct TimetableEditsDocument: FileDocument {
