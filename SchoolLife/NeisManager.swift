@@ -162,6 +162,12 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         return formatter.string(from: selectedDate)
     }
 
+    func apiDateString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter.string(from: date)
+    }
+
     func loadTimetableEditsIfNeeded() {
         if let d = timetableDateEditsJSON.data(using: .utf8),
            let decoded = try? JSONDecoder().decode([String: String].self, from: d) {
@@ -635,16 +641,27 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     func fetchMeal() {
         guard !schoolCode.isEmpty else { return }
 
+        let today = Calendar.current.startOfDay(for: Date())
+        guard let endDate = Calendar.current.date(byAdding: .day, value: 3, to: today) else { return }
+
         let urlString =
-        "https://open.neis.go.kr/hub/mealServiceDietInfo?KEY=\(apiKey)&Type=json&ATPT_OFCDC_SC_CODE=\(officeCode)&SD_SCHUL_CODE=\(schoolCode)&MLSV_YMD=\(getApiDateString())"
+        "https://open.neis.go.kr/hub/mealServiceDietInfo?KEY=\(apiKey)&Type=json&ATPT_OFCDC_SC_CODE=\(officeCode)&SD_SCHUL_CODE=\(schoolCode)&MLSV_FROM_YMD=\(apiDateString(from: today))&MLSV_TO_YMD=\(apiDateString(from: endDate))"
 
         guard let url = URL(string: urlString) else { return }
 
         URLSession.shared.dataTask(with: url) { data, _, _ in
             if let data = data,
                let decoded = try? JSONDecoder().decode(NeisResponse.self, from: data),
-               let rows = decoded.mealServiceDietInfo?[1].row {
-                DispatchQueue.main.async { self.meals = rows }
+               let rows = decoded.mealServiceDietInfo?
+                .compactMap({ $0.row })
+                .first(where: { !$0.isEmpty }) {
+                let sortedRows = rows.sorted {
+                    if $0.MLSV_YMD == $1.MLSV_YMD {
+                        return ($0.MMEAL_SC_CODE) < ($1.MMEAL_SC_CODE)
+                    }
+                    return $0.MLSV_YMD < $1.MLSV_YMD
+                }
+                DispatchQueue.main.async { self.meals = sortedRows }
             } else {
                 DispatchQueue.main.async { self.meals = [] }
             }
@@ -818,6 +835,14 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     private func fetchComciTimetable() {
         guard !schoolName.isEmpty else { return }
+        guard !isWeekend(selectedDate) else {
+            DispatchQueue.main.async {
+                self.timetableMessage = "주말에는 시간표가 없습니다."
+                self.timetableRawJSON = ""
+                self.timetables = []
+            }
+            return
+        }
 
         resolveComciSchoolMapping { result in
             switch result {
@@ -998,6 +1023,12 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     private func applyComciWeeklyCache(_ cacheEntry: ComciWeeklyCacheEntry, school: ComciResolvedSchool) {
+        guard !isWeekend(selectedDate) else {
+            timetableMessage = "주말에는 시간표가 없습니다."
+            timetables = []
+            return
+        }
+
         let weekdayIndex = weekdayIndexForSelectedDate()
         let periods = cacheEntry.weeklyGrid.first(where: { $0.weekday_index == weekdayIndex })?.periods ?? []
         let rows = periods.compactMap { period -> TimetableRow? in
@@ -1018,6 +1049,11 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         timetables = rows.sorted {
             (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
         }
+    }
+
+    private func isWeekend(_ date: Date) -> Bool {
+        let weekday = Calendar(identifier: .gregorian).component(.weekday, from: date)
+        return weekday == 1 || weekday == 7
     }
 
     private func findBestComciSchoolMatch(
@@ -1148,8 +1184,8 @@ struct NeisResponse: Codable {
 
 struct MealInfo: Codable { let row: [MealRow]? }
 struct MealRow: Codable, Identifiable {
-    var id: String { MMEAL_SC_CODE }
-    let MMEAL_SC_NM, DDISH_NM, CAL_INFO, MMEAL_SC_CODE: String
+    var id: String { "\(MLSV_YMD)-\(MMEAL_SC_CODE)" }
+    let MMEAL_SC_NM, DDISH_NM, CAL_INFO, MMEAL_SC_CODE, MLSV_YMD: String
 }
 
 struct TimetableInfo: Codable {
