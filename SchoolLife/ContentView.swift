@@ -419,6 +419,13 @@ struct TimetableView: View {
 struct MealView: View {
     @ObservedObject var neisManager: NeisManager
 
+    private var mealsByDate: [(date: String, meals: [MealRow])] {
+        let grouped = Dictionary(grouping: neisManager.meals, by: \.MLSV_YMD)
+        return grouped
+            .map { (date: $0.key, meals: $0.value.sorted { $0.MMEAL_SC_CODE < $1.MMEAL_SC_CODE }) }
+            .sorted { $0.date < $1.date }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -427,24 +434,36 @@ struct MealView: View {
                         .padding(.top, 50)
                         .foregroundColor(.secondary)
                 } else {
-                    ForEach(neisManager.meals) { meal in
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(meal.MMEAL_SC_NM)
-                                .font(.caption)
-                                .bold()
-                                .padding(6)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(6)
-
-                            Text(neisManager.cleanMealText(meal.DDISH_NM))
-                                .font(.system(size: 17, weight: .medium))
+                    ForEach(mealsByDate, id: \.date) { mealSection in
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text(formattedMealDate(mealSection.date))
+                                .font(.headline)
                                 .foregroundColor(.primary)
-                                .lineSpacing(6)
 
-                            Text(meal.CAL_INFO)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                            ForEach(mealSection.meals) { meal in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(meal.MMEAL_SC_NM)
+                                        .font(.caption)
+                                        .bold()
+                                        .padding(6)
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(6)
+
+                                    Text(neisManager.cleanMealText(meal.DDISH_NM))
+                                        .font(.system(size: 17, weight: .medium))
+                                        .foregroundColor(.primary)
+                                        .lineSpacing(6)
+
+                                    Text(meal.CAL_INFO)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(20)
+                                .background(Color(.systemBackground).opacity(0.7))
+                                .cornerRadius(18)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(24)
@@ -455,6 +474,18 @@ struct MealView: View {
             }
             .padding(20)
         }
+    }
+
+    private func formattedMealDate(_ ymd: String) -> String {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyyMMdd"
+
+        guard let date = parser.date(from: ymd) else { return ymd }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일 (E)"
+        return formatter.string(from: date)
     }
 }
 
