@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import WidgetKit
 import WatchConnectivity
+import UserNotifications
 
 enum TimetableSource: String, CaseIterable, Identifiable {
     case neis
@@ -90,6 +91,18 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @AppStorage("timetableReplaceRulesJSON", store: AppGroupManager.shared.sharedDefaults)
     private var timetableReplaceRulesJSON: String = "{}"
 
+    @AppStorage("timetableExtraPeriodsJSON", store: AppGroupManager.shared.sharedDefaults)
+    private var timetableExtraPeriodsJSON: String = "{}"
+
+    @AppStorage("timetableCommentsJSON", store: AppGroupManager.shared.sharedDefaults)
+    private var timetableCommentsJSON: String = "{}"
+
+    @AppStorage("commentReminderHour", store: AppGroupManager.shared.sharedDefaults)
+    var commentReminderHour: Int = 19
+
+    @AppStorage("commentReminderMinute", store: AppGroupManager.shared.sharedDefaults)
+    var commentReminderMinute: Int = 0
+
     @AppStorage("savedComciSchoolCode", store: AppGroupManager.shared.sharedDefaults)
     private var comciSchoolCode: String = ""
 
@@ -107,6 +120,9 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     @Published private(set) var timetableDateEdits: [String: String] = [:]
     @Published private(set) var timetableWeeklyEdits: [String: String] = [:]
+    @Published private(set) var timetableExtraPeriods: [String: Int] = [:]
+    @Published private(set) var timetableComments: [String: TimetableComment] = [:]
+    @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
 
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
     private let comciRelayBaseURL = "https://comci-direct-server.vercel.app"
@@ -116,7 +132,6 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     private let replaceRuleMarker = "|SUBJECT|"
     private let comciWeeklyCacheMaxEntries = 24
     private let comciWeeklyCacheFreshHours: TimeInterval = 6 * 60 * 60
-
     var timetableSource: TimetableSource {
         get { TimetableSource(rawValue: timetableSourceRawValue) ?? .neis }
         set {
@@ -130,7 +145,10 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         super.init()
         configureWatchSession()
         loadTimetableEditsIfNeeded()
+        loadTimetableExtrasIfNeeded()
+        loadTimetableCommentsIfNeeded()
         loadComciWeeklyCacheIfNeeded()
+        refreshNotificationAuthorizationStatus()
     }
 
     private func configureWatchSession() {
@@ -192,6 +210,24 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         migrateLegacyReplaceRulesIfNeeded()
     }
 
+    private func loadTimetableExtrasIfNeeded() {
+        if let d = timetableExtraPeriodsJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([String: Int].self, from: d) {
+            timetableExtraPeriods = decoded
+        } else {
+            timetableExtraPeriods = [:]
+        }
+    }
+
+    private func loadTimetableCommentsIfNeeded() {
+        if let d = timetableCommentsJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([String: TimetableComment].self, from: d) {
+            timetableComments = decoded
+        } else {
+            timetableComments = [:]
+        }
+    }
+
     private func saveTimetableEdits() {
         if let data = try? JSONEncoder().encode(timetableDateEdits),
            let json = String(data: data, encoding: .utf8) {
@@ -210,6 +246,22 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
         WidgetCenter.shared.reloadAllTimelines()
         syncWatchContext()
+    }
+
+    private func saveTimetableExtras() {
+        if let data = try? JSONEncoder().encode(timetableExtraPeriods),
+           let json = String(data: data, encoding: .utf8) {
+            timetableExtraPeriodsJSON = json
+        }
+        objectWillChange.send()
+    }
+
+    private func saveTimetableComments() {
+        if let data = try? JSONEncoder().encode(timetableComments),
+           let json = String(data: data, encoding: .utf8) {
+            timetableCommentsJSON = json
+        }
+        objectWillChange.send()
     }
 
     private func loadComciWeeklyCacheIfNeeded() {
@@ -356,7 +408,27 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
             return replaced
         }
 
-        return row.ITRT_CNTNT ?? "-"
+        let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return original.isEmpty ? "빈 시간표" : original
+    }
+
+    func editableText(for row: TimetableRow) -> String {
+        let dk = dateEditKey(for: row)
+        if let edited = timetableDateEdits[dk] {
+            return edited
+        }
+
+        let wk = weeklyEditKey(for: row)
+        if let edited = timetableWeeklyEdits[wk] {
+            return edited
+        }
+
+        let replaceKey = replaceRuleKey(for: row)
+        if let replaced = replaceRules[replaceKey] {
+            return replaced
+        }
+
+        return row.ITRT_CNTNT ?? ""
     }
 
     func hasAnyEditedText(for row: TimetableRow) -> Bool {
@@ -578,6 +650,233 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         objectWillChange.send()
     }
 
+    private func timetableSlotScopeKey(for date: String, grade: String, classNum: String) -> String {
+        "\(currentDateWeeklySchoolIdentifier())|\(date)|\(grade)|\(classNum)"
+    }
+
+    private func timetableSlotScopeKey(for row: TimetableRow) -> String {
+        let date = row.ALL_TI_YMD ?? getApiDateString()
+        let rowGrade = row.GRADE ?? grade
+        let rowClass = row.CLASS_NM ?? classNum
+        return "\(rowSchoolIdentifier(for: row))|\(date)|\(rowGrade)|\(rowClass)"
+    }
+
+    private func timetableCommentKey(for row: TimetableRow) -> String {
+        "\(timetableSlotScopeKey(for: row))|\(row.PERIO ?? "0")"
+    }
+
+    func timetableComment(for row: TimetableRow) -> TimetableComment? {
+        timetableComments[timetableCommentKey(for: row)]
+    }
+
+    func setTimetableComment(text: String, reminderEnabled: Bool, for row: TimetableRow) {
+        let key = timetableCommentKey(for: row)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            clearTimetableComment(for: row)
+            return
+        }
+
+        let comment = TimetableComment(
+            text: trimmed,
+            reminderEnabled: reminderEnabled,
+            updatedAt: ISO8601DateFormatter().string(from: Date())
+        )
+        timetableComments[key] = comment
+        saveTimetableComments()
+        scheduleCommentNotificationIfNeeded(for: row, comment: comment)
+    }
+
+    func clearTimetableComment(for row: TimetableRow) {
+        let key = timetableCommentKey(for: row)
+        timetableComments.removeValue(forKey: key)
+        saveTimetableComments()
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [commentNotificationIdentifier(for: key)])
+    }
+
+    func addEmptyTimetablePeriodIfPossible() {
+        guard canAddEmptyTimetablePeriod else { return }
+        let key = timetableSlotScopeKey(for: getApiDateString(), grade: grade, classNum: classNum)
+        timetableExtraPeriods[key] = 7
+        saveTimetableExtras()
+    }
+
+    var canAddEmptyTimetablePeriod: Bool {
+        guard !isWeekend(selectedDate) else { return false }
+        guard timetables.isEmpty else { return false }
+        return timetableSlots().count == 6
+    }
+
+    func timetableSlots() -> [TimetableSlot] {
+        guard !isWeekend(selectedDate) else { return [] }
+
+        let selectedDateString = getApiDateString()
+        let scopeKey = timetableSlotScopeKey(for: selectedDateString, grade: grade, classNum: classNum)
+        let apiRowsByPeriod = Dictionary(grouping: timetables) { Int($0.PERIO ?? "0") ?? 0 }
+        let maxAPI = apiRowsByPeriod.keys.max() ?? 0
+        let maxExtra = timetableExtraPeriods[scopeKey] ?? 0
+        let slotCount = max(6, maxAPI, maxExtra)
+
+        return (1...slotCount).map { period in
+            let row = apiRowsByPeriod[period]?.first ?? placeholderRow(for: period)
+            let key = timetableCommentKey(for: row)
+            return TimetableSlot(
+                row: row,
+                displayText: displayText(for: row),
+                comment: timetableComments[key],
+                isPlaceholder: (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
+        }
+    }
+
+    private func placeholderRow(for period: Int) -> TimetableRow {
+        TimetableRow(
+            ALL_TI_YMD: getApiDateString(),
+            GRADE: grade,
+            CLASS_NM: classNum,
+            PERIO: String(period),
+            ITRT_CNTNT: nil,
+            SOURCE_KIND: timetableSource.rawValue,
+            SOURCE_SCHOOL_ID: timetableSource == .comci ? currentTimetableSchoolIdentifier() : nil
+        )
+    }
+
+    func commentReminderTimeText() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "a h:mm"
+        return formatter.string(from: reminderTimeDate())
+    }
+
+    func reminderTimeDate() -> Date {
+        var components = DateComponents()
+        components.hour = commentReminderHour
+        components.minute = commentReminderMinute
+        return Calendar.current.date(from: components) ?? Date()
+    }
+
+    func updateCommentReminderTime(_ date: Date) {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        commentReminderHour = components.hour ?? 19
+        commentReminderMinute = components.minute ?? 0
+        rescheduleAllCommentNotifications()
+    }
+
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in
+            self.refreshNotificationAuthorizationStatus()
+            self.rescheduleAllCommentNotifications()
+        }
+    }
+
+    func refreshNotificationAuthorizationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                self.notificationAuthorizationStatus = settings.authorizationStatus
+            }
+        }
+    }
+
+    func rescheduleAllCommentNotifications() {
+        for (key, comment) in timetableComments {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [commentNotificationIdentifier(for: key)])
+            guard comment.reminderEnabled else { continue }
+            guard let row = rowFromCommentKey(key) else { continue }
+            scheduleCommentNotificationIfNeeded(for: row, comment: comment)
+        }
+    }
+
+    private func rowFromCommentKey(_ key: String) -> TimetableRow? {
+        let parts = key.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 5 else { return nil }
+        let period = parts.last ?? ""
+        let rowClass = parts[parts.count - 2]
+        let rowGrade = parts[parts.count - 3]
+        let date = parts[parts.count - 4]
+        let schoolIdentifier = parts.dropLast(4).joined(separator: "|")
+
+        let sourceKind: String
+        let sourceSchoolID: String?
+        if schoolIdentifier.hasPrefix("comci|") {
+            sourceKind = TimetableSource.comci.rawValue
+            sourceSchoolID = String(schoolIdentifier.dropFirst("comci|".count))
+        } else {
+            sourceKind = TimetableSource.neis.rawValue
+            sourceSchoolID = nil
+        }
+
+        let subject = timetables.first(where: { $0.PERIO == period })?.ITRT_CNTNT
+
+        return TimetableRow(
+            ALL_TI_YMD: date,
+            GRADE: rowGrade,
+            CLASS_NM: rowClass,
+            PERIO: period,
+            ITRT_CNTNT: subject,
+            SOURCE_KIND: sourceKind,
+            SOURCE_SCHOOL_ID: sourceSchoolID
+        )
+    }
+
+    private func scheduleCommentNotificationIfNeeded(for row: TimetableRow, comment: TimetableComment) {
+        let key = timetableCommentKey(for: row)
+        let identifier = commentNotificationIdentifier(for: key)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+
+        guard comment.reminderEnabled else { return }
+
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+            guard let triggerDate = self.commentNotificationDate(for: row), triggerDate > Date() else { return }
+
+            let content = UNMutableNotificationContent()
+            let subject = self.displayText(for: row)
+            let dateText = self.notificationDateText(for: row.ALL_TI_YMD ?? self.getApiDateString())
+            content.title = "\(dateText) \(row.PERIO ?? "?")교시 알림"
+            content.body = "\(subject)\n\(comment.text)"
+            content.sound = .default
+
+            let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    private func commentNotificationIdentifier(for key: String) -> String {
+        "timetable-comment-\(key)"
+    }
+
+    private func commentNotificationDate(for row: TimetableRow) -> Date? {
+        guard let dateString = row.ALL_TI_YMD,
+              let eventDate = dateFromAPIString(dateString),
+              let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: eventDate) else {
+            return nil
+        }
+
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: previousDay)
+        components.hour = commentReminderHour
+        components.minute = commentReminderMinute
+        return Calendar.current.date(from: components)
+    }
+
+    private func notificationDateText(for dateString: String) -> String {
+        guard let date = dateFromAPIString(dateString) else { return dateString }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일"
+        return formatter.string(from: date)
+    }
+
+    private func dateFromAPIString(_ dateString: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter.date(from: dateString)
+    }
 
     func searchSchool(query: String) {
         guard !query.isEmpty,
@@ -823,11 +1122,13 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                     } else {
                         self.timetables = []
                     }
+                    self.rescheduleAllCommentNotifications()
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.timetableMessage = "교육청 시간표를 불러오지 못했습니다."
                     self.timetables = []
+                    self.rescheduleAllCommentNotifications()
                 }
             }
         }.resume()
@@ -840,6 +1141,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                 self.timetableMessage = "주말에는 시간표가 없습니다."
                 self.timetableRawJSON = ""
                 self.timetables = []
+                self.rescheduleAllCommentNotifications()
             }
             return
         }
@@ -851,6 +1153,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                     self.timetableMessage = error.localizedDescription
                     self.timetableRawJSON = error.localizedDescription
                     self.timetables = []
+                    self.rescheduleAllCommentNotifications()
                 }
             case .success(let school):
                 let cacheKey = self.comciWeeklyCacheKey(for: school, grade: self.grade, classNum: self.classNum, date: self.selectedDate)
@@ -888,6 +1191,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                     self.timetableMessage = "컴시간 시간표를 불러오지 못했습니다."
                     self.timetableRawJSON = ""
                     self.timetables = []
+                    self.rescheduleAllCommentNotifications()
                 }
                 return
             }
@@ -902,6 +1206,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                         self.timetableRawJSON = raw
                         self.timetableMessage = errorResponse.message
                         self.timetables = []
+                        self.rescheduleAllCommentNotifications()
                     }
                     return
                 }
@@ -931,6 +1236,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                     self.timetableRawJSON = raw
                     self.timetableMessage = "컴시간 시간표를 해석하지 못했습니다."
                     self.timetables = []
+                    self.rescheduleAllCommentNotifications()
                 }
             }
         }.resume()
@@ -1026,6 +1332,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         guard !isWeekend(selectedDate) else {
             timetableMessage = "주말에는 시간표가 없습니다."
             timetables = []
+            rescheduleAllCommentNotifications()
             return
         }
 
@@ -1049,6 +1356,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         timetables = rows.sorted {
             (Int($0.PERIO ?? "0") ?? 0) < (Int($1.PERIO ?? "0") ?? 0)
         }
+        rescheduleAllCommentNotifications()
     }
 
     private func isWeekend(_ date: Date) -> Bool {
@@ -1214,6 +1522,20 @@ struct TimetableRow: Codable, Identifiable {
     let ITRT_CNTNT: String?
     let SOURCE_KIND: String?
     let SOURCE_SCHOOL_ID: String?
+}
+
+struct TimetableComment: Codable {
+    let text: String
+    let reminderEnabled: Bool
+    let updatedAt: String
+}
+
+struct TimetableSlot: Identifiable {
+    var id: String { row.id }
+    let row: TimetableRow
+    let displayText: String
+    let comment: TimetableComment?
+    let isPlaceholder: Bool
 }
 
 struct ComciResolvedSchool {

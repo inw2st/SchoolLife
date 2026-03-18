@@ -138,7 +138,10 @@ struct TimetableView: View {
     @ObservedObject var neisManager: NeisManager
 
     @State private var editingRow: TimetableRow? = nil
+    @State private var commentingSlot: TimetableSlot? = nil
     @State private var editText: String = ""
+    @State private var commentText: String = ""
+    @State private var reminderEnabled = true
     @State private var mode: EditApplyMode = .weekly
 
     // 편집 적용 방식
@@ -172,6 +175,10 @@ struct TimetableView: View {
             case .replaceSubject: return "arrow.left.arrow.right"
             }
         }
+    }
+
+    private var timetableSlots: [TimetableSlot] {
+        neisManager.timetableSlots()
     }
 
     var body: some View {
@@ -225,7 +232,7 @@ struct TimetableView: View {
             // 시간표 목록
             ScrollView {
                 VStack(spacing: 10) {
-                    if neisManager.timetables.isEmpty {
+                    if timetableSlots.isEmpty {
                         Text("시간표 데이터가 없습니다.")
                             .foregroundColor(.secondary)
                             .padding(.top, 50)
@@ -237,41 +244,99 @@ struct TimetableView: View {
                                 .padding(.top, 8)
                         }
                     } else {
-                        ForEach(neisManager.timetables) { time in
-                            Button {
-                                editingRow = time
-                                editText = neisManager.displayText(for: time)
-                                mode = .weekly // 기본 선택
-                            } label: {
-                                HStack {
-                                    Text("\(time.PERIO ?? "")교시")
-                                        .bold()
-                                        .foregroundColor(.blue)
-                                        .frame(width: 60, alignment: .leading)
-
-                                    Text(neisManager.displayText(for: time))
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-
-                                    Spacer()
-
-                                    if neisManager.hasAnyEditedText(for: time) {
-                                        Image(systemName: "pencil.circle.fill")
-                                            .foregroundColor(.orange)
-                                    }
-                                }
-                                .padding()
-                                .background(Color(.tertiarySystemBackground))
-                                .cornerRadius(12)
-                            }
-                            .buttonStyle(.plain)
+                        if neisManager.timetables.isEmpty, let message = neisManager.timetableMessage {
+                            Text(message)
+                                .font(.caption)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
                         }
 
-                        if neisManager.timetables.count > 0 && neisManager.timetables.count < 7 {
-                            Text("나머지 교시 정보는 학교에서 등록하지 않았습니다.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 10)
+                        ForEach(timetableSlots) { slot in
+                            HStack(spacing: 12) {
+                                Button {
+                                    openCommentEditor(for: slot)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack(spacing: 8) {
+                                            Text("\(slot.row.PERIO ?? "")교시")
+                                                .font(.subheadline.weight(.bold))
+                                                .foregroundColor(.blue)
+
+                                            Text(slot.displayText)
+                                                .font(.headline)
+                                                .foregroundColor(.primary)
+                                                .multilineTextAlignment(.leading)
+
+                                            if slot.isPlaceholder {
+                                                Text("빈")
+                                                    .font(.caption2)
+                                                    .bold()
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 3)
+                                                    .background(Color.blue.opacity(0.12))
+                                                    .foregroundColor(.blue)
+                                                    .cornerRadius(999)
+                                            }
+
+                                            if neisManager.hasAnyEditedText(for: slot.row) {
+                                                Image(systemName: "pencil.circle.fill")
+                                                    .foregroundColor(.orange)
+                                            }
+                                        }
+
+                                        if let comment = slot.comment {
+                                            Text(comment.text)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(2)
+
+                                            if comment.reminderEnabled {
+                                                Label("전날 \(neisManager.commentReminderTimeText()) 알림", systemImage: "bell.badge.fill")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.blue)
+                                            }
+                                        } else {
+                                            Text("탭해서 수행평가나 준비물 메모 추가")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding()
+                                    .background(Color(.tertiarySystemBackground))
+                                    .cornerRadius(12)
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    openEditEditor(for: slot.row)
+                                } label: {
+                                    Image(systemName: "square.and.pencil")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                        .frame(width: 42, height: 42)
+                                        .background(Color(.tertiarySystemBackground))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        if neisManager.canAddEmptyTimetablePeriod {
+                            Button {
+                                neisManager.addEmptyTimetablePeriodIfPossible()
+                            } label: {
+                                Label("7교시 빈 시간표 추가", systemImage: "plus.circle.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(.blue)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.blue.opacity(0.08))
+                                    .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 6)
                         }
                     }
                 }
@@ -284,6 +349,7 @@ struct TimetableView: View {
                 Form {
                     // 편집 적용 방식 선택
                     Section("적용 방식") {
+                        let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                         ForEach(EditApplyMode.allCases) { m in
                             Button {
                                 mode = m
@@ -310,10 +376,10 @@ struct TimetableView: View {
                                 .padding(.vertical, 6)
                             }
                             .buttonStyle(.plain)
+                            .disabled(m == .replaceSubject && original.isEmpty)
                         }
 
                         if mode == .replaceSubject {
-                            let original = (row.ITRT_CNTNT ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                             Text(original.isEmpty
                                  ? "원본 과목명이 없어 치환 규칙을 만들 수 없어요."
                                  : "'\(original)'이(가) 시간표에 나오면 항상 아래 값으로 표시돼요.")
@@ -323,13 +389,13 @@ struct TimetableView: View {
                     }
 
                     Section("변경할 표시") {
-                        TextField("예: 한국지리 / A_한국지리", text: $editText, axis: .vertical)
+                        TextField("예: 문학 / 수행평가", text: $editText, axis: .vertical)
                             .lineLimit(2...5)
                     }
 
                     Section("원본 과목") {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(row.ITRT_CNTNT ?? "-")
+                            Text((row.ITRT_CNTNT ?? "").isEmpty ? "빈 시간표" : (row.ITRT_CNTNT ?? "-"))
                                 .foregroundColor(.secondary)
 
                             HStack(spacing: 10) {
@@ -375,9 +441,99 @@ struct TimetableView: View {
                 }
             }
         }
+        .sheet(item: $commentingSlot) { slot in
+            NavigationStack {
+                Form {
+                    Section("선택한 교시") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("\(slot.row.PERIO ?? "?")교시")
+                                .font(.headline)
+                            Text(slot.displayText)
+                                .foregroundColor(.secondary)
+                            Text(formattedCommentDate())
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Section("코멘트") {
+                        TextField("수행평가, 준비물, 발표 순서 등을 적어두세요", text: $commentText, axis: .vertical)
+                            .lineLimit(4...8)
+                    }
+
+                    Section("알림") {
+                        Toggle("전날 알림 받기", isOn: $reminderEnabled)
+                        DatePicker(
+                            "기본 알림 시각",
+                            selection: Binding(
+                                get: { neisManager.reminderTimeDate() },
+                                set: { neisManager.updateCommentReminderTime($0) }
+                            ),
+                            displayedComponents: .hourAndMinute
+                        )
+
+                        Text("현재 기본 시각: \(neisManager.commentReminderTimeText())")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        if reminderEnabled && neisManager.notificationAuthorizationStatus != .authorized && neisManager.notificationAuthorizationStatus != .provisional {
+                            Button("알림 권한 요청") {
+                                neisManager.requestNotificationPermission()
+                            }
+                        }
+                    }
+
+                    if slot.comment != nil {
+                        Section("삭제") {
+                            Button(role: .destructive) {
+                                neisManager.clearTimetableComment(for: slot.row)
+                                commentingSlot = nil
+                            } label: {
+                                Text("이 교시 코멘트 삭제")
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("교시 코멘트")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("취소") { commentingSlot = nil }
+                    }
+
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("저장") {
+                            if reminderEnabled,
+                               neisManager.notificationAuthorizationStatus != .authorized,
+                               neisManager.notificationAuthorizationStatus != .provisional {
+                                neisManager.requestNotificationPermission()
+                            }
+                            neisManager.setTimetableComment(
+                                text: commentText,
+                                reminderEnabled: reminderEnabled,
+                                for: slot.row
+                            )
+                            commentingSlot = nil
+                        }
+                        .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Actions
+
+    private func openEditEditor(for row: TimetableRow) {
+        editingRow = row
+        editText = neisManager.editableText(for: row)
+        mode = .weekly
+    }
+
+    private func openCommentEditor(for slot: TimetableSlot) {
+        commentingSlot = slot
+        commentText = slot.comment?.text ?? ""
+        reminderEnabled = slot.comment?.reminderEnabled ?? true
+    }
 
     private func saveEdit(row: TimetableRow) {
         let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -411,6 +567,13 @@ struct TimetableView: View {
         neisManager.clearEditedTextDate(for: row)
         neisManager.clearEditedTextWeekly(for: row)
         neisManager.clearReplaceRule(for: row)
+    }
+
+    private func formattedCommentDate() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일 (E)"
+        return formatter.string(from: neisManager.selectedDate)
     }
 }
 
@@ -503,6 +666,13 @@ struct SettingsView: View {
     @State private var showResetTargetDialog = false
     @State private var pendingResetTarget: TimetableEditResetTarget?
 
+    private var reminderTimeBinding: Binding<Date> {
+        Binding(
+            get: { neisManager.reminderTimeDate() },
+            set: { neisManager.updateCommentReminderTime($0) }
+        )
+    }
+
     var body: some View {
         List {
             Section(header: Text("화면 설정")) {
@@ -533,6 +703,31 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
 
                 Text("급식과 학사일정은 기존처럼 교육청 API를 사용하고, 시간표만 선택한 소스로 불러옵니다.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section(header: Text("코멘트 알림")) {
+                HStack {
+                    Text("알림 권한")
+                    Spacer()
+                    Text(notificationStatusText())
+                        .foregroundColor(.secondary)
+                }
+
+                if neisManager.notificationAuthorizationStatus != .authorized && neisManager.notificationAuthorizationStatus != .provisional {
+                    Button("알림 권한 요청") {
+                        neisManager.requestNotificationPermission()
+                    }
+                }
+
+                DatePicker(
+                    "기본 알림 시각",
+                    selection: reminderTimeBinding,
+                    displayedComponents: .hourAndMinute
+                )
+
+                Text("시간표 코멘트에서 전날 알림을 켜면 이 시각에 로컬 알림을 예약합니다.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -701,6 +896,26 @@ struct SettingsView: View {
                     }
                 )
             }
+        }
+        .onAppear {
+            neisManager.refreshNotificationAuthorizationStatus()
+        }
+    }
+
+    private func notificationStatusText() -> String {
+        switch neisManager.notificationAuthorizationStatus {
+        case .authorized:
+            return "허용됨"
+        case .provisional:
+            return "임시 허용"
+        case .denied:
+            return "거부됨"
+        case .notDetermined:
+            return "미요청"
+        case .ephemeral:
+            return "일시 허용"
+        @unknown default:
+            return "알 수 없음"
         }
     }
 }
