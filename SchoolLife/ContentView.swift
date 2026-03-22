@@ -201,6 +201,7 @@ struct TimetableView: View {
                 .onChange(of: neisManager.grade) { _, _ in
                     neisManager.fetchTimetable()
                     neisManager.syncWatchContext()
+                    neisManager.markSyncRelevantSettingChanged()
                     WidgetCenter.shared.reloadTimelines(ofKind: "TimetableWidget")
                 }
 
@@ -218,6 +219,7 @@ struct TimetableView: View {
                     .onChange(of: neisManager.classNum) { _, _ in
                         neisManager.fetchTimetable()
                         neisManager.syncWatchContext()
+                        neisManager.markSyncRelevantSettingChanged()
                         WidgetCenter.shared.reloadTimelines(ofKind: "TimetableWidget")
                     }
 
@@ -342,6 +344,9 @@ struct TimetableView: View {
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 30)
+            }
+            .refreshable {
+                await neisManager.refreshTimetableManually()
             }
         }
         .sheet(item: $editingRow) { row in
@@ -732,6 +737,82 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
+            Section(header: Text("기기간 동기화")) {
+                HStack {
+                    Text("동기화 서버")
+                    Spacer()
+                    Text(neisManager.effectiveSyncServerURL)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    Text("생성 기기")
+                    Spacer()
+                    Text(neisManager.bootstrapCreatorDescription)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                Button("동기화 공간 생성 또는 재사용") {
+                    neisManager.createOrGetBootstrapSyncSpace { result in
+                        switch result {
+                        case .success:
+                            activeAlert = .notice(message: "동기화 공간을 준비했고 최신 데이터를 가져왔습니다.")
+                        case .failure(let error):
+                            activeAlert = .notice(message: error.localizedDescription)
+                        }
+                    }
+                }
+
+                Button("생성된 동기화 정보 불러오기") {
+                    neisManager.fetchBootstrapSyncSpace { result in
+                        switch result {
+                        case .success:
+                            activeAlert = .notice(message: "생성된 동기화 키를 불러오고 최신 데이터를 가져왔습니다.")
+                        case .failure(let error):
+                            activeAlert = .notice(message: error.localizedDescription)
+                        }
+                    }
+                }
+
+                Button("지금 동기화") {
+                    neisManager.syncNow { result in
+                        switch result {
+                        case .success(let message):
+                            activeAlert = .notice(message: message)
+                        case .failure(let error):
+                            activeAlert = .notice(message: error.localizedDescription)
+                        }
+                    }
+                }
+                .disabled(neisManager.syncInProgress)
+
+                if !neisManager.effectiveSyncSpaceKey.isEmpty {
+                    Button("동기화 연결 해제", role: .destructive) {
+                        neisManager.disconnectSync()
+                        activeAlert = .notice(message: "이 기기에 저장된 동기화 키를 지웠습니다.")
+                    }
+                }
+
+                HStack {
+                    Text("최근 동기화")
+                    Spacer()
+                    Text(neisManager.syncLastSyncedDescription)
+                        .foregroundColor(.secondary)
+                }
+
+                if let syncStatusMessage = neisManager.syncStatusMessage, !syncStatusMessage.isEmpty {
+                    Text(syncStatusMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Text("첫 기기에서 생성하면 서버가 동기화 키와 생성 기기 정보를 기억합니다. 다른 기기에서는 불러오기만 해도 같은 공간에 연결되고, 앱이 열려 있는 동안에는 몇 초 간격으로 자동 반영됩니다.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Section(header: Text("현재 정보")) {
                 Button {
                     showSchoolSearch = true
@@ -982,6 +1063,10 @@ struct GradeClassEditView: View {
             }
             .navigationTitle("학년/반 변경")
             .navigationBarTitleDisplayMode(.inline)
+            .onDisappear {
+                neisManager.fetchTimetable()
+                neisManager.markSyncRelevantSettingChanged()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("닫기") { dismiss() }

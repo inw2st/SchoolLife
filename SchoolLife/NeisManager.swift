@@ -3,6 +3,7 @@ import SwiftUI
 import WidgetKit
 import WatchConnectivity
 import UserNotifications
+import UIKit
 
 enum TimetableSource: String, CaseIterable, Identifiable {
     case neis
@@ -115,6 +116,27 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @AppStorage("comciWeeklyTimetableCacheJSON", store: AppGroupManager.shared.sharedDefaults)
     private var comciWeeklyTimetableCacheJSON: String = "{}"
 
+    @AppStorage("syncServerURL", store: AppGroupManager.shared.sharedDefaults)
+    var syncServerURL: String = ""
+
+    @AppStorage("syncSpaceKey", store: AppGroupManager.shared.sharedDefaults)
+    var syncSpaceKey: String = ""
+
+    @AppStorage("syncServerVersion", store: AppGroupManager.shared.sharedDefaults)
+    private var syncServerVersion: Int = 0
+
+    @AppStorage("syncLocalModifiedAt", store: AppGroupManager.shared.sharedDefaults)
+    private var syncLocalModifiedAt: String = ""
+
+    @AppStorage("syncLastSyncedAt", store: AppGroupManager.shared.sharedDefaults)
+    private var syncLastSyncedAt: String = ""
+
+    @AppStorage("syncBootstrapCreatorDeviceName", store: AppGroupManager.shared.sharedDefaults)
+    private var syncBootstrapCreatorDeviceNameStorage: String = ""
+
+    @AppStorage("syncBootstrapCreatedAt", store: AppGroupManager.shared.sharedDefaults)
+    private var syncBootstrapCreatedAtStorage: String = ""
+
     @Published private(set) var replaceRules: [String: String] = [:]
 
 
@@ -123,21 +145,33 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published private(set) var timetableExtraPeriods: [String: Int] = [:]
     @Published private(set) var timetableComments: [String: TimetableComment] = [:]
     @Published var notificationAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published var syncStatusMessage: String? = nil
+    @Published var syncInProgress: Bool = false
 
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
     private let comciRelayBaseURL = "https://comci-direct-server.vercel.app"
+    private let embeddedSyncServerURL = "https://performance-sync-vercel.vercel.app"
     private var watchSession: WCSession?
     private var comciWeeklyCache: [String: ComciWeeklyCacheEntry] = [:]
+    private var syncTimer: Timer?
+    private var pendingSyncWorkItem: DispatchWorkItem?
+    private var lastObservedSyncSignature: String = ""
+    private var isApplyingRemoteSyncPayload = false
+    private var fastSyncUntil: Date?
 
     private let replaceRuleMarker = "|SUBJECT|"
     private let comciWeeklyCacheMaxEntries = 24
     private let comciWeeklyCacheFreshHours: TimeInterval = 6 * 60 * 60
+    private let normalSyncInterval: TimeInterval = 20
+    private let fastSyncInterval: TimeInterval = 3
+    private let fastSyncWindow: TimeInterval = 10
     var timetableSource: TimetableSource {
         get { TimetableSource(rawValue: timetableSourceRawValue) ?? .neis }
         set {
             timetableSourceRawValue = newValue.rawValue
             WidgetCenter.shared.reloadTimelines(ofKind: "TimetableWidget")
             objectWillChange.send()
+            noteLocalSyncMutation()
         }
     }
 
@@ -149,6 +183,15 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         loadTimetableCommentsIfNeeded()
         loadComciWeeklyCacheIfNeeded()
         refreshNotificationAuthorizationStatus()
+        configureSyncLifecycleObservers()
+        lastObservedSyncSignature = currentSyncPayloadSignature()
+        startSyncLoopIfNeeded()
+        queueSyncCycle(delay: 1.5)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        invalidateSyncLoop()
     }
 
     private func configureWatchSession() {
@@ -246,6 +289,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
         WidgetCenter.shared.reloadAllTimelines()
         syncWatchContext()
+        noteLocalSyncMutation()
     }
 
     private func saveTimetableExtras() {
@@ -254,6 +298,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
             timetableExtraPeriodsJSON = json
         }
         objectWillChange.send()
+        noteLocalSyncMutation()
     }
 
     private func saveTimetableComments() {
@@ -262,6 +307,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
             timetableCommentsJSON = json
         }
         objectWillChange.send()
+        noteLocalSyncMutation()
     }
 
     private func loadComciWeeklyCacheIfNeeded() {
@@ -761,6 +807,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         commentReminderHour = components.hour ?? 19
         commentReminderMinute = components.minute ?? 0
         rescheduleAllCommentNotifications()
+        noteLocalSyncMutation()
     }
 
     func requestNotificationPermission() {
@@ -924,11 +971,631 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
             self.syncWatchContext()
 
             self.fetchAll()
+            self.noteLocalSyncMutation()
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 WidgetCenter.shared.reloadAllTimelines()
             }
         }
+    }
+
+    private func configureSyncLifecycleObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSyncDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSyncDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleSyncDidBecomeActive() {
+        startSyncLoopIfNeeded()
+        queueSyncCycle(delay: 0.5)
+    }
+
+    @objc private func handleSyncDidEnterBackground() {
+        invalidateSyncLoop()
+    }
+
+    private func startSyncLoopIfNeeded() {
+        guard syncTimer == nil else { return }
+        syncTimer = Timer.scheduledTimer(withTimeInterval: currentSyncInterval, repeats: true) { [weak self] _ in
+            self?.performAutomaticSyncIfNeeded()
+        }
+        if let syncTimer {
+            RunLoop.main.add(syncTimer, forMode: .common)
+        }
+    }
+
+    private func invalidateSyncLoop() {
+        syncTimer?.invalidate()
+        syncTimer = nil
+        pendingSyncWorkItem?.cancel()
+        pendingSyncWorkItem = nil
+    }
+
+    private func queueSyncCycle(delay: TimeInterval = 0.8) {
+        guard hasSyncConfiguration else { return }
+        pendingSyncWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.performAutomaticSyncIfNeeded()
+        }
+        pendingSyncWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func noteLocalSyncMutation() {
+        guard !isApplyingRemoteSyncPayload else { return }
+        syncLocalModifiedAt = isoTimestamp()
+        activateFastSyncWindow()
+        if syncInProgress {
+            queueSyncCycle()
+        } else {
+            performAutomaticSyncIfNeeded()
+        }
+    }
+
+    private var currentSyncInterval: TimeInterval {
+        guard let fastSyncUntil else { return normalSyncInterval }
+        return fastSyncUntil > Date() ? fastSyncInterval : normalSyncInterval
+    }
+
+    private func activateFastSyncWindow() {
+        fastSyncUntil = Date().addingTimeInterval(fastSyncWindow)
+        restartSyncLoop()
+    }
+
+    private func refreshSyncLoopIfNeeded() {
+        guard syncTimer != nil else { return }
+        if currentSyncInterval != syncTimer?.timeInterval {
+            restartSyncLoop()
+        }
+    }
+
+    private func restartSyncLoop() {
+        invalidateSyncLoop()
+        startSyncLoopIfNeeded()
+    }
+
+    var hasSyncConfiguration: Bool {
+        !effectiveSyncServerURL.isEmpty && !effectiveSyncSpaceKey.isEmpty
+    }
+
+    var effectiveSyncServerURL: String {
+        let configured = normalizedSyncServerURL(syncServerURL)
+        return configured.isEmpty ? embeddedSyncServerURL : configured
+    }
+
+    var effectiveSyncSpaceKey: String {
+        syncSpaceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var bootstrapCreatorDescription: String {
+        guard !syncBootstrapCreatorDeviceNameStorage.isEmpty else { return "아직 없음" }
+        if let date = ISO8601DateFormatter().date(from: syncBootstrapCreatedAtStorage) {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "ko_KR")
+            formatter.dateFormat = "M/d a h:mm"
+            return "\(syncBootstrapCreatorDeviceNameStorage) · \(formatter.string(from: date))"
+        }
+        return syncBootstrapCreatorDeviceNameStorage
+    }
+
+    var syncLastSyncedDescription: String {
+        guard !syncLastSyncedAt.isEmpty,
+              let date = ISO8601DateFormatter().date(from: syncLastSyncedAt) else {
+            return "아직 없음"
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M/d a h:mm:ss"
+        return formatter.string(from: date)
+    }
+
+    func disconnectSync() {
+        syncSpaceKey = ""
+        syncServerVersion = 0
+        syncLastSyncedAt = ""
+        syncStatusMessage = "저장된 동기화 키를 지웠습니다."
+    }
+
+    func createOrGetBootstrapSyncSpace(completion: @escaping (Result<String, Error>) -> Void) {
+        let serverURL = effectiveSyncServerURL
+        let body = SyncCreateRequest(
+            deviceName: currentDeviceName(),
+            clientModifiedAt: currentSyncModifiedAt(),
+            payload: currentSyncPayload()
+        )
+
+        requestSync(
+            path: "/api/bootstrap/create-or-get",
+            serverURL: serverURL,
+            body: body,
+            expecting: SyncBootstrapResponse.self
+        ) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self.applyBootstrapResponse(response, serverURL: serverURL)
+                    self.pullLatestSync(forceApply: true) { pullResult in
+                        switch pullResult {
+                        case .success:
+                            completion(.success(response.syncKey))
+                        case .failure(let error):
+                            completion(.failure(error))
+                        }
+                    }
+                case .failure(let error):
+                    self.syncStatusMessage = error.localizedDescription
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    func fetchBootstrapSyncSpace(completion: @escaping (Result<String, Error>) -> Void) {
+        let serverURL = effectiveSyncServerURL
+        requestSync(
+            path: "/api/bootstrap/current",
+            serverURL: serverURL,
+            expecting: SyncBootstrapResponse.self
+        ) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self.applyBootstrapResponse(response, serverURL: serverURL)
+                    self.pullLatestSync(forceApply: true) { pullResult in
+                        switch pullResult {
+                        case .success:
+                            completion(.success(response.syncKey))
+                        case .failure(let error):
+                            completion(.failure(error))
+                        }
+                    }
+                case .failure(let error):
+                    self.syncStatusMessage = error.localizedDescription
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    func createSyncSpace(completion: @escaping (Result<String, Error>) -> Void) {
+        let serverURL = normalizedSyncServerURL(syncServerURL)
+        guard !serverURL.isEmpty else {
+            completion(.failure(syncError("서버 URL을 먼저 입력하세요.")))
+            return
+        }
+
+        let payload = currentSyncPayload()
+        let body = SyncCreateRequest(
+            deviceName: currentDeviceName(),
+            clientModifiedAt: currentSyncModifiedAt(),
+            payload: payload
+        )
+
+        requestSync(
+            path: "/api/sync/create",
+            serverURL: serverURL,
+            body: body,
+            expecting: SyncCreateResponse.self
+        ) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let response):
+                    self.syncServerURL = serverURL
+                    self.syncSpaceKey = response.syncKey
+                    self.syncServerVersion = response.version
+                    self.syncLastSyncedAt = response.updatedAt
+                    self.lastObservedSyncSignature = self.currentSyncPayloadSignature()
+                    self.syncStatusMessage = "새 동기화 키를 만들었습니다."
+                    completion(.success(response.syncKey))
+                case .failure(let error):
+                    self.syncStatusMessage = error.localizedDescription
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    func connectSyncSpace(completion: @escaping (Result<String, Error>) -> Void) {
+        let serverURL = normalizedSyncServerURL(syncServerURL)
+        let key = syncSpaceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !serverURL.isEmpty else {
+            completion(.failure(syncError("서버 URL을 입력하세요.")))
+            return
+        }
+        guard !key.isEmpty else {
+            completion(.failure(syncError("동기화 키를 입력하세요.")))
+            return
+        }
+
+        syncServerURL = serverURL
+        syncSpaceKey = key
+        pullLatestSync(forceApply: true) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self.syncStatusMessage = "동기화 서버에 연결했습니다."
+                    completion(.success("연결 완료"))
+                case .failure(let error):
+                    self.syncStatusMessage = error.localizedDescription
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    func syncNow(completion: @escaping (Result<String, Error>) -> Void) {
+        performAutomaticSyncIfNeeded(manual: true, completion: completion)
+    }
+
+    func markSyncRelevantSettingChanged() {
+        noteLocalSyncMutation()
+    }
+
+    @MainActor
+    func refreshTimetableManually() async {
+        await withCheckedContinuation { continuation in
+            syncNow { _ in
+                continuation.resume()
+            }
+        }
+        fetchAll()
+    }
+
+    private func performAutomaticSyncIfNeeded(manual: Bool = false, completion: ((Result<String, Error>) -> Void)? = nil) {
+        if let fastSyncUntil, fastSyncUntil <= Date() {
+            self.fastSyncUntil = nil
+            refreshSyncLoopIfNeeded()
+        }
+
+        if effectiveSyncSpaceKey.isEmpty {
+            fetchBootstrapSyncSpace { result in
+                switch result {
+                case .success:
+                    self.performAutomaticSyncIfNeeded(manual: manual, completion: completion)
+                case .failure(let error):
+                    completion?(.failure(error))
+                }
+            }
+            return
+        }
+        guard !syncInProgress else {
+            completion?(.success("동기화 진행 중"))
+            return
+        }
+
+        if hasPendingLocalSyncChange {
+            pushCurrentSyncPayload(completion: completion)
+        } else {
+            pullLatestSync(forceApply: manual, completion: completion)
+        }
+    }
+
+    private func pushCurrentSyncPayload(completion: ((Result<String, Error>) -> Void)? = nil) {
+        let serverURL = effectiveSyncServerURL
+        let key = effectiveSyncSpaceKey
+        guard !serverURL.isEmpty, !key.isEmpty else {
+            completion?(.failure(syncError("동기화 설정이 비어 있습니다.")))
+            return
+        }
+
+        syncInProgress = true
+        let body = SyncPushRequest(
+            syncKey: key,
+            clientKnownVersion: syncServerVersion,
+            clientModifiedAt: currentSyncModifiedAt(),
+            deviceName: currentDeviceName(),
+            payload: currentSyncPayload()
+        )
+
+        requestSync(
+            path: "/api/sync/push",
+            serverURL: serverURL,
+            body: body,
+            expecting: SyncEnvelope.self
+        ) { result in
+            DispatchQueue.main.async {
+                self.syncInProgress = false
+                switch result {
+                case .success(let envelope):
+                    self.applyPushEnvelope(envelope)
+                    completion?(.success("업로드 완료"))
+                case .failure(let error):
+                    self.syncStatusMessage = error.localizedDescription
+                    completion?(.failure(error))
+                }
+            }
+        }
+    }
+
+    private func pullLatestSync(forceApply: Bool = false, completion: ((Result<String, Error>) -> Void)? = nil) {
+        let serverURL = effectiveSyncServerURL
+        let key = effectiveSyncSpaceKey
+        guard !serverURL.isEmpty, !key.isEmpty else {
+            completion?(.failure(syncError("동기화 설정이 비어 있습니다.")))
+            return
+        }
+
+        syncInProgress = true
+        let body = SyncPullRequest(syncKey: key, knownVersion: syncServerVersion)
+
+        requestSync(
+            path: "/api/sync/pull",
+            serverURL: serverURL,
+            body: body,
+            expecting: SyncEnvelope.self
+        ) { result in
+            DispatchQueue.main.async {
+                self.syncInProgress = false
+                switch result {
+                case .success(let envelope):
+                    let remoteSignature = self.signature(for: envelope.payload)
+                    let remoteIsNewerThanLocal = self.isTimestamp(envelope.updatedAt, newerThan: self.currentSyncModifiedAt())
+                    let payloadDiffers = remoteSignature != self.currentSyncPayloadSignature()
+                    let shouldApply = (forceApply || envelope.version != self.syncServerVersion || payloadDiffers)
+                        && remoteIsNewerThanLocal
+
+                    if shouldApply {
+                        self.applyRemoteSyncEnvelope(envelope)
+                    } else if payloadDiffers && self.hasPendingLocalSyncChange {
+                        self.pushCurrentSyncPayload(completion: completion)
+                        return
+                    } else {
+                        self.syncServerVersion = envelope.version
+                        self.syncLastSyncedAt = envelope.updatedAt
+                        self.syncStatusMessage = "최신 상태입니다."
+                    }
+                    completion?(.success("가져오기 완료"))
+                case .failure(let error):
+                    self.syncStatusMessage = error.localizedDescription
+                    completion?(.failure(error))
+                }
+            }
+        }
+    }
+
+    private func applyPushEnvelope(_ envelope: SyncEnvelope) {
+        let remoteSignature = signature(for: envelope.payload)
+        if remoteSignature != currentSyncPayloadSignature() {
+            applyRemoteSyncEnvelope(envelope)
+            return
+        }
+        syncLocalModifiedAt = envelope.updatedAt
+        syncServerVersion = envelope.version
+        syncLastSyncedAt = envelope.updatedAt
+        syncStatusMessage = "동기화를 완료했습니다."
+        lastObservedSyncSignature = remoteSignature
+    }
+
+    private func applyRemoteSyncEnvelope(_ envelope: SyncEnvelope) {
+        isApplyingRemoteSyncPayload = true
+        let payload = envelope.payload
+
+        officeCode = payload.officeCode
+        schoolCode = payload.schoolCode
+        schoolName = payload.schoolName
+        grade = payload.grade
+        classNum = payload.classNum
+        timetableSourceRawValue = payload.timetableSourceRawValue
+        comciSchoolCode = payload.comciSchoolCode
+        comciMappedSchoolName = payload.comciMappedSchoolName
+        comciRegionName = payload.comciRegionName
+        timetableDateEditsJSON = payload.timetableDateEditsJSON
+        timetableWeeklyEditsJSON = payload.timetableWeeklyEditsJSON
+        timetableReplaceRulesJSON = payload.timetableReplaceRulesJSON
+        timetableExtraPeriodsJSON = payload.timetableExtraPeriodsJSON
+        timetableCommentsJSON = payload.timetableCommentsJSON
+        commentReminderHour = payload.commentReminderHour
+        commentReminderMinute = payload.commentReminderMinute
+        syncLocalModifiedAt = envelope.updatedAt
+        syncServerVersion = envelope.version
+        syncLastSyncedAt = envelope.updatedAt
+
+        loadTimetableEditsIfNeeded()
+        loadTimetableExtrasIfNeeded()
+        loadTimetableCommentsIfNeeded()
+        rescheduleAllCommentNotifications()
+        syncWatchContext()
+        fetchAll()
+        WidgetCenter.shared.reloadAllTimelines()
+
+        lastObservedSyncSignature = signature(for: payload)
+        syncStatusMessage = "다른 기기의 변경사항을 가져왔습니다."
+        isApplyingRemoteSyncPayload = false
+        activateFastSyncWindow()
+        objectWillChange.send()
+    }
+
+    private func currentSyncPayload() -> TimetableSyncPayload {
+        TimetableSyncPayload(
+            officeCode: officeCode,
+            schoolCode: schoolCode,
+            schoolName: schoolName,
+            grade: grade,
+            classNum: classNum,
+            timetableSourceRawValue: timetableSourceRawValue,
+            comciSchoolCode: comciSchoolCode,
+            comciMappedSchoolName: comciMappedSchoolName,
+            comciRegionName: comciRegionName,
+            timetableDateEditsJSON: timetableDateEditsJSON,
+            timetableWeeklyEditsJSON: timetableWeeklyEditsJSON,
+            timetableReplaceRulesJSON: timetableReplaceRulesJSON,
+            timetableExtraPeriodsJSON: timetableExtraPeriodsJSON,
+            timetableCommentsJSON: timetableCommentsJSON,
+            commentReminderHour: commentReminderHour,
+            commentReminderMinute: commentReminderMinute
+        )
+    }
+
+    private func currentSyncPayloadSignature() -> String {
+        signature(for: currentSyncPayload())
+    }
+
+    private var hasPendingLocalSyncChange: Bool {
+        guard !isApplyingRemoteSyncPayload else { return false }
+
+        let signatureChanged = currentSyncPayloadSignature() != lastObservedSyncSignature
+        let locallyNewerThanServer = isTimestamp(currentSyncModifiedAt(), newerThan: syncLastSyncedAt)
+        return signatureChanged || locallyNewerThanServer
+    }
+
+    private func signature(for payload: TimetableSyncPayload) -> String {
+        let encoder = JSONEncoder.prettyPrinted
+        guard let data = try? encoder.encode(payload) else { return "" }
+        return data.base64EncodedString()
+    }
+
+    private func currentSyncModifiedAt() -> String {
+        if syncLocalModifiedAt.isEmpty {
+            syncLocalModifiedAt = isoTimestamp()
+        }
+        return syncLocalModifiedAt
+    }
+
+    private func currentDeviceName() -> String {
+        UIDevice.current.name
+    }
+
+    private func applyBootstrapResponse(_ response: SyncBootstrapResponse, serverURL: String) {
+        syncServerURL = serverURL
+        syncSpaceKey = response.syncKey
+        syncBootstrapCreatorDeviceNameStorage = response.creatorDeviceName
+        syncBootstrapCreatedAtStorage = response.createdAt
+        syncStatusMessage = "동기화 키를 불러왔습니다."
+    }
+
+    private func normalizedSyncServerURL(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let withScheme = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
+        return withScheme.hasSuffix("/") ? String(withScheme.dropLast()) : withScheme
+    }
+
+    private func isoTimestamp() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
+    private func isTimestamp(_ lhs: String, newerThan rhs: String) -> Bool {
+        guard let lhsDate = parseSyncTimestamp(lhs) else { return false }
+        guard let rhsDate = parseSyncTimestamp(rhs) else { return true }
+        return lhsDate > rhsDate
+    }
+
+    private func parseSyncTimestamp(_ value: String) -> Date? {
+        guard !value.isEmpty else { return nil }
+        return ISO8601DateFormatter().date(from: value)
+    }
+
+    private func syncError(_ message: String) -> NSError {
+        NSError(domain: "SchoolLifeSync", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    private func requestSync<RequestBody: Encodable, ResponseBody: Decodable>(
+        path: String,
+        serverURL: String,
+        body: RequestBody,
+        expecting: ResponseBody.Type,
+        completion: @escaping (Result<ResponseBody, Error>) -> Void
+    ) {
+        guard let url = URL(string: serverURL + path) else {
+            completion(.failure(syncError("서버 URL 형식이 올바르지 않습니다.")))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let data else {
+                completion(.failure(self.syncError("서버 응답을 읽지 못했습니다.")))
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                if let errorResponse = try? JSONDecoder().decode(SyncErrorResponse.self, from: data) {
+                    completion(.failure(self.syncError(errorResponse.error)))
+                } else {
+                    completion(.failure(self.syncError("동기화 서버 오류 (\(httpResponse.statusCode))")))
+                }
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
+                completion(.success(decoded))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    private func requestSync<ResponseBody: Decodable>(
+        path: String,
+        serverURL: String,
+        expecting: ResponseBody.Type,
+        completion: @escaping (Result<ResponseBody, Error>) -> Void
+    ) {
+        guard let url = URL(string: serverURL + path) else {
+            completion(.failure(syncError("서버 URL 형식이 올바르지 않습니다.")))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  let data else {
+                completion(.failure(self.syncError("서버 응답을 읽지 못했습니다.")))
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                if let errorResponse = try? JSONDecoder().decode(SyncErrorResponse.self, from: data) {
+                    completion(.failure(self.syncError(errorResponse.error)))
+                } else {
+                    completion(.failure(self.syncError("동기화 서버 오류 (\(httpResponse.statusCode))")))
+                }
+                return
+            }
+
+            do {
+                let decoded = try JSONDecoder().decode(ResponseBody.self, from: data)
+                completion(.success(decoded))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
     }
     
     func fetchAll() {
@@ -1620,6 +2287,70 @@ struct TimetableEditExportScope: Codable {
     let schoolName: String
     let grade: String
     let classNum: String
+}
+
+struct TimetableSyncPayload: Codable {
+    let officeCode: String
+    let schoolCode: String
+    let schoolName: String
+    let grade: String
+    let classNum: String
+    let timetableSourceRawValue: String
+    let comciSchoolCode: String
+    let comciMappedSchoolName: String
+    let comciRegionName: String
+    let timetableDateEditsJSON: String
+    let timetableWeeklyEditsJSON: String
+    let timetableReplaceRulesJSON: String
+    let timetableExtraPeriodsJSON: String
+    let timetableCommentsJSON: String
+    let commentReminderHour: Int
+    let commentReminderMinute: Int
+}
+
+struct SyncCreateRequest: Codable {
+    let deviceName: String
+    let clientModifiedAt: String
+    let payload: TimetableSyncPayload
+}
+
+struct SyncPullRequest: Codable {
+    let syncKey: String
+    let knownVersion: Int
+}
+
+struct SyncPushRequest: Codable {
+    let syncKey: String
+    let clientKnownVersion: Int
+    let clientModifiedAt: String
+    let deviceName: String
+    let payload: TimetableSyncPayload
+}
+
+struct SyncCreateResponse: Codable {
+    let syncKey: String
+    let version: Int
+    let updatedAt: String
+}
+
+struct SyncBootstrapResponse: Codable {
+    let syncKey: String
+    let creatorDeviceName: String
+    let createdAt: String
+    let version: Int
+    let updatedAt: String
+}
+
+struct SyncEnvelope: Codable {
+    let spaceId: String
+    let version: Int
+    let updatedAt: String
+    let lastModifiedBy: String
+    let payload: TimetableSyncPayload
+}
+
+struct SyncErrorResponse: Codable {
+    let error: String
 }
 
 private extension KeyedDecodingContainer {
