@@ -1274,7 +1274,12 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         }
 
         if hasPendingLocalSyncChange {
-            pushCurrentSyncPayload(completion: completion)
+            // 단, 서버 버전을 모르는(= 처음 연결) 경우는 pull 먼저
+            if syncServerVersion == 0 {
+                pullLatestSync(forceApply: true, completion: completion)
+            } else {
+                pushCurrentSyncPayload(completion: completion)
+            }
         } else {
             pullLatestSync(forceApply: manual, completion: completion)
         }
@@ -1341,8 +1346,10 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
                     let remoteSignature = self.signature(for: envelope.payload)
                     let remoteIsNewerThanLocal = self.isTimestamp(envelope.updatedAt, newerThan: self.currentSyncModifiedAt())
                     let payloadDiffers = remoteSignature != self.currentSyncPayloadSignature()
-                    let shouldApply = (forceApply || envelope.version != self.syncServerVersion || payloadDiffers)
-                        && remoteIsNewerThanLocal
+                    let shouldApply = forceApply
+                        || envelope.version != self.syncServerVersion
+                        || (payloadDiffers && !self.hasPendingLocalSyncChange)
+
 
                     if shouldApply {
                         self.applyRemoteSyncEnvelope(envelope)
@@ -1443,9 +1450,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
     private var hasPendingLocalSyncChange: Bool {
         guard !isApplyingRemoteSyncPayload else { return false }
 
-        let signatureChanged = currentSyncPayloadSignature() != lastObservedSyncSignature
-        let locallyNewerThanServer = isTimestamp(currentSyncModifiedAt(), newerThan: syncLastSyncedAt)
-        return signatureChanged || locallyNewerThanServer
+        return currentSyncPayloadSignature() != lastObservedSyncSignature
     }
 
     private func signature(for payload: TimetableSyncPayload) -> String {
