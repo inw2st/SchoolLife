@@ -150,7 +150,7 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
 
     private let apiKey = "b22e0d13ad8e49179c4d37cff6aed382"
     private let comciRelayBaseURL = "https://comci-direct-server.vercel.app"
-    private let embeddedSyncServerURL = "https://performance-sync-vercel.vercel.app"
+    private let embeddedSyncServerURL = "https://schoollife-sync.minwestt.workers.dev"
     private var watchSession: WCSession?
     private var comciWeeklyCache: [String: ComciWeeklyCacheEntry] = [:]
     private var syncTimer: Timer?
@@ -307,6 +307,10 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
             timetableCommentsJSON = json
         }
         objectWillChange.send()
+        // applyRemoteSyncEnvelope 실행 중에는 mutation으로 처리하지 않음.
+        // (서버 데이터 적용 도중 loadTimetableCommentsIfNeeded가 호출되면서
+        //  이 함수가 간접적으로 불릴 경우를 방어)
+        guard !isApplyingRemoteSyncPayload else { return }
         noteLocalSyncMutation()
     }
 
@@ -1415,11 +1419,19 @@ final class NeisManager: NSObject, ObservableObject, WCSessionDelegate {
         fetchAll()
         WidgetCenter.shared.reloadAllTimelines()
 
-        lastObservedSyncSignature = signature(for: payload)
         syncStatusMessage = "다른 기기의 변경사항을 가져왔습니다."
         isApplyingRemoteSyncPayload = false
-        activateFastSyncWindow()
         objectWillChange.send()
+
+        // @AppStorage 쓰기가 UserDefaults에 완전히 커밋된 뒤
+        // signature를 재계산해야 hasPendingLocalSyncChange가 오탐되지 않음.
+        // 즉시 activateFastSyncWindow를 호출하면 @AppStorage 커밋 전에
+        // currentSyncPayload()가 이전 값을 읽어 불필요한 push가 발생함.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.lastObservedSyncSignature = self.currentSyncPayloadSignature()
+            self.activateFastSyncWindow()
+        }
     }
 
     private func currentSyncPayload() -> TimetableSyncPayload {

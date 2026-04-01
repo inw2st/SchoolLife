@@ -446,6 +446,7 @@ struct TimetableView: View {
                 }
             }
         }
+        
         .sheet(item: $commentingSlot) { slot in
             NavigationStack {
                 Form {
@@ -670,6 +671,7 @@ struct SettingsView: View {
     @State private var activeAlert: SettingsAlertState?
     @State private var showResetTargetDialog = false
     @State private var pendingResetTarget: TimetableEditResetTarget?
+    @State private var showSyncServerEdit = false
 
     private var reminderTimeBinding: Binding<Date> {
         Binding(
@@ -738,12 +740,20 @@ struct SettingsView: View {
             }
 
             Section(header: Text("기기간 동기화")) {
-                HStack {
-                    Text("동기화 서버")
-                    Spacer()
-                    Text(neisManager.effectiveSyncServerURL)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.trailing)
+                // 동기화 서버 URL - 탭하면 편집
+                Button {
+                    showSyncServerEdit = true
+                } label: {
+                    HStack {
+                        Text("동기화 서버")
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text(neisManager.syncServerURL.isEmpty ? "기본 서버" : neisManager.syncServerURL)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.trailing)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
 
                 HStack {
@@ -754,22 +764,12 @@ struct SettingsView: View {
                         .multilineTextAlignment(.trailing)
                 }
 
-                Button("동기화 공간 생성 또는 재사용") {
+                // 두 버튼 통합
+                Button("동기화 공간 연결") {
                     neisManager.createOrGetBootstrapSyncSpace { result in
                         switch result {
                         case .success:
                             activeAlert = .notice(message: "동기화 공간을 준비했고 최신 데이터를 가져왔습니다.")
-                        case .failure(let error):
-                            activeAlert = .notice(message: error.localizedDescription)
-                        }
-                    }
-                }
-
-                Button("생성된 동기화 정보 불러오기") {
-                    neisManager.fetchBootstrapSyncSpace { result in
-                        switch result {
-                        case .success:
-                            activeAlert = .notice(message: "생성된 동기화 키를 불러오고 최신 데이터를 가져왔습니다.")
                         case .failure(let error):
                             activeAlert = .notice(message: error.localizedDescription)
                         }
@@ -808,11 +808,11 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Text("첫 기기에서 생성하면 서버가 동기화 키와 생성 기기 정보를 기억합니다. 다른 기기에서는 불러오기만 해도 같은 공간에 연결되고, 앱이 열려 있는 동안에는 몇 초 간격으로 자동 반영됩니다.")
+                Text("첫 기기에서 연결하면 서버가 동기화 키와 생성 기기 정보를 기억합니다.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-
+            
             Section(header: Text("현재 정보")) {
                 Button {
                     showSchoolSearch = true
@@ -905,6 +905,31 @@ struct SettingsView: View {
         .sheet(isPresented: $showGradeClassEdit) {
             GradeClassEditView(neisManager: neisManager)
         }
+        .sheet(isPresented: $showSyncServerEdit) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField("비워두면 기본 서버 사용", text: $neisManager.syncServerURL)
+                            .autocapitalization(.none)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                    } header: {
+                        Text("서버 URL")
+                    } footer: {
+                        Text("비워두면 기본 내장 서버를 사용합니다.\n예: https://schoollife-sync.minwestt.workers.dev")
+                    }
+                }
+                .navigationTitle("동기화 서버 설정")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("완료") { showSyncServerEdit = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+        
         .fileExporter(
             isPresented: $showExporter,
             document: exportDocument,
